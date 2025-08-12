@@ -1,7 +1,13 @@
+// -----------------------------
+// Global state / varialbles
+// -----------------------------
 let app_id, account_id;
 let cachedFile = null;
 let cachedBase64 = null;
 
+// -----------------------------
+// PageLoad - populate form
+// -----------------------------
 ZOHO.embeddedApp.on("PageLoad", async (entity) => {
   try {
     const entity_id = entity.EntityId;
@@ -24,7 +30,7 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
 
     legalNameTaxablePerson = accountData.Legal_Name_of_Taxable_Person;
     ctTrn = accountData.Corporate_Tax_TRN;
-    taxPeriodVat = accountData.Tax_Period_VAT;
+    taxPeriodVat = accountData.Tax_Period_VAT_QTR;
 
     var now = new Date();
     var currentYear = now.getFullYear();
@@ -44,7 +50,9 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
   }
 });
 
-
+// -----------------------------
+// Small UI helpers & validators
+// -----------------------------
 function clearErrors() {
   document.querySelectorAll(".error-message").forEach((span) => {
     span.textContent = "";
@@ -83,10 +91,9 @@ function validateFinancialYear(fy) {
   return "";
 }
 
-/* -------------------------
-   Tax Period Ending logic
-   ------------------------- */
-
+// -----------------------------
+// Tax period display logic
+// -----------------------------
 function updateTaxPeriodEnding() {
   try {
     const fyRaw = document.getElementById("financial-year")?.value;
@@ -104,37 +111,18 @@ function updateTaxPeriodEnding() {
       return;
     }
 
-    const q1SegmentMatch = taxPeriodValue.match(/Q1:\s*([^,]+?)(?:,|$|Q2:)/i);
-    if (!q1SegmentMatch) {
-      console.warn("Q1 segment not found. Value:", taxPeriodValue);
+    const normalized = taxPeriodValue.replace(/[–—−]/g, "-");
+    const parts = normalized.split(/\s*-\s*/);
+
+    if (parts.length < 2) {
       targetField.value = "";
       return;
     }
 
-  const q1Segment = q1SegmentMatch[1].trim();
-  const normalized = q1Segment.replace(/[–—−]/g, "-");
-  const parts = normalized.split(/\s*-\s*/);
+    const startParsed = parseDayMonth(parts[0].trim());
+    const endParsed = parseDayMonth(parts[1].trim());
 
-  if (parts.length < 2) {
-    console.warn("Q1 range did not split into two parts:", normalized);
-    targetField.value = "";
-    return;
-  }
-
-    const startPart = parts[0].trim();
-    const endPartRaw = parts[1].trim();
-
-    // Parse start (day + month)
-    const startParsed = parseDayMonth(startPart);
-    if (!startParsed) {
-      console.warn("Failed to parse startPart:", startPart);
-      targetField.value = "";
-      return;
-    }
-
-    const endParsed = parseDayMonth(endPartRaw);
-    if (!endParsed) {
-      console.warn("Failed to parse endPart:", endPartRaw);
+    if (!startParsed || !endParsed) {
       targetField.value = "";
       return;
     }
@@ -142,29 +130,26 @@ function updateTaxPeriodEnding() {
     const startMonthNum = monthNameToNumber(startParsed.monthStr);
     const endMonthNum = monthNameToNumber(endParsed.monthStr);
     if (!startMonthNum || !endMonthNum) {
-      console.warn("Month number conversion failed:", startParsed, endParsed);
       targetField.value = "";
       return;
     }
 
     let startYear, endYear;
     if (endMonthNum < startMonthNum) {
-      // crosses year boundary (e.g., Dec -> Feb)
-      startYear = fy - 1;
+      startYear = fy - 1; // e.g., start = Dec (previous year)
       endYear = fy;
     } else {
       startYear = fy;
       endYear = fy;
     }
 
-    // Choose correct end day when given "28/29"
-    const endDay = Array.isArray(endParsed.day) ? (isLeapYear(endYear) ? endParsed.day[1] : endParsed.day[0]) : endParsed.day;
-    const startDay = Array.isArray(startParsed.day) ? startParsed.day[0] : startParsed.day; // start rarely has /, but handle if present
+    const startDay = Array.isArray(startParsed.day) ? startParsed.day[0] : startParsed.day;
+    const endDay = Array.isArray(endParsed.day)
+      ? (isLeapYear(endYear) ? endParsed.day[1] : endParsed.day[0])
+      : endParsed.day;
 
     const startFormatted = formatPrettyDate(startDay, startMonthNum, startYear);
     const endFormatted = formatPrettyDate(endDay, endMonthNum, endYear);
-
-    console.log("updateTaxPeriodEnding -> start:", startPart, "->", startFormatted, "end:", endPartRaw, "->", endFormatted);
 
     targetField.value = `${startFormatted} - ${endFormatted}`;
   } catch (e) {
@@ -192,7 +177,6 @@ function parseDayMonth(text) {
 
 function monthNameToNumber(m) {
   if (!m) return null;
-  // Normalize e.g., "Jan", "January" -> works
   try {
     const date = new Date(`${m} 1, 2000`);
     if (isNaN(date)) return null;
@@ -203,7 +187,6 @@ function monthNameToNumber(m) {
 }
 
 function formatPrettyDate(day, monthNum, year) {
-  // day may be number or NaN; monthNum 1..12
   const d = parseInt(day, 10);
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${monthNames[monthNum - 1]} ${d}, ${year}`;
@@ -213,39 +196,9 @@ function isLeapYear(year) {
   return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
 }
 
-/* -------------------------
-   End Tax Period logic
-   ------------------------- */
-
-// Validation + live calculation on Financial Year change
-const fyInput = document.getElementById("financial-year");
-if (fyInput) {
-  fyInput.addEventListener("input", () => {
-    fyInput.value = fyInput.value.replace(/\D/g, "").slice(0, 4);
-    const err = validateFinancialYear(fyInput.value);
-    if (!err) {
-      const span = document.getElementById("error-financial-year");
-      if (span) span.textContent = "";
-    }
-  });
-  fyInput.addEventListener("blur", () => {
-    const val = fyInput.value;
-    if (/^\d{4}$/.test(val)) {
-      let year = parseInt(val, 10);
-      if (year < 2025) year = 2025;
-      if (year > 2050) year = 2050;
-      fyInput.value = String(year);
-    }
-    updateTaxPeriodEnding();
-  });
-}
-
-// Recalculate when Tax Period VAT changes
-const taxPeriodVatSelect = document.getElementById("tax-period-vat");
-if (taxPeriodVatSelect) {
-  taxPeriodVatSelect.addEventListener("change", updateTaxPeriodEnding);
-}
-
+// -----------------------------
+// File caching & upload
+// -----------------------------
 async function cacheFileOnChange(event) {
   clearErrors();
 
@@ -265,7 +218,7 @@ async function cacheFileOnChange(event) {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.onerror = reject;
-      reader.readAsDataURL(file); 
+      reader.readAsDataURL(file);
     });
 
     let base64Content = base64;
@@ -276,6 +229,7 @@ async function cacheFileOnChange(event) {
     cachedFile = file;
     cachedBase64 = base64Content;
 
+    // small UX pause to show progress bar
     await new Promise((res) => setTimeout(res, 3000));
     hideUploadBuffer();
   } catch (err) {
@@ -300,19 +254,37 @@ async function uploadFileToCRM() {
   });
 }
 
-function addOneYearAndSet28(dateStr) {
-  try {
-    const date = new Date(dateStr);
-    if (isNaN(date)) return "";
-    date.setFullYear(date.getFullYear() + 1);
-    date.setDate(date.getDate() + 28);
-    return date.toISOString().split("T")[0];
-  } catch {
-    return "";
-  }
+// -----------------------------
+// Date & formatting
+// -----------------------------
+function addOneYearAnd28Days(date) {
+  // Accepts a Date object
+  const result = new Date(date);
+  result.setFullYear(result.getFullYear() + 1);
+  result.setDate(result.getDate() + 28);
+  return result;
 }
 
+function addMonths(date, months) {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
 
+function formatDateYYYYMMDD(date) {
+  if (!(date instanceof Date) || isNaN(date)) {
+    console.error("Invalid date passed to formatDateYYYYMMDD:", date);
+    return "";
+  }
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// -----------------------------
+// Update Records
+// -----------------------------
 async function update_record(event = null) {
   if (event) event.preventDefault();
 
@@ -325,6 +297,7 @@ async function update_record(event = null) {
     submitBtn.textContent = "Submitting...";
   }
 
+  // collect fields (use same IDs as your form)
   const referenceNo = document.getElementById("reference-number")?.value;
   const taxablePerson = document.getElementById("name-of-taxable-person")?.value;
   const taxRegNo = document.getElementById("tax-registration-number")?.value;
@@ -352,34 +325,76 @@ async function update_record(event = null) {
     return;
   }
 
-  // --- Calculate QTR VAT return due dates ---
-  const qtrDueDates = {};
-  if (taxPeriodEnding) {
-    // Try to get the Q1 start date from Tax Period VAT
-    const q1Match = taxPeriodVat.match(/Q1:\s*([^,]+?)(?:,|$|Q2:)/i);
-    if (q1Match) {
-      const q1StartRaw = q1Match[1].trim().split(/\s*-\s*/)[0];
-      const parsedQ1 = parseDayMonth(q1StartRaw);
-      const monthNum = monthNameToNumber(parsedQ1.monthStr);
-      if (monthNum) {
-        const fy = parseInt(financialYear, 10);
-        const startDate = new Date(fy, monthNum - 1, Array.isArray(parsedQ1.day) ? parsedQ1.day[0] : parsedQ1.day);
+  // -----------------------------
+  // Calculate quarter due date and VAT_Return_Due_Date
+  // -----------------------------
+  let qtrDueDates = {};
+  let currentQuarterField = null;
+  let vatReturnDueDate = null;
 
-        // Quarter intervals
-        const qtrDates = [0, 3, 6, 9].map(m => {
-          const d = new Date(startDate);
-          d.setMonth(d.getMonth() + m);
-          return addOneYearAndSet28(d);
-        });
+  try {
+    const normalized = taxPeriodVat.replace(/[–—−]/g, "-");
+    const parts = normalized.split(/\s*-\s*/);
+    if (parts.length >= 2) {
+      const startParsed = parseDayMonth(parts[0].trim());
+      const endParsed = parseDayMonth(parts[1].trim());
+      if (startParsed && endParsed) {
+        const startMonthNum = monthNameToNumber(startParsed.monthStr);
+        const endMonthNum = monthNameToNumber(endParsed.monthStr);
+        if (startMonthNum && endMonthNum) {
+          const fy = parseInt(financialYear, 10);
+          let startYear, endYear;
+          if (endMonthNum < startMonthNum) {
+            // crosses year boundary, e.g., Dec -> Feb
+            startYear = fy - 1;
+            endYear = fy;
+          } else {
+            startYear = fy;
+            endYear = fy;
+          }
 
-        qtrDueDates.st_Qtr_VAT_return_DD = qtrDates[0];
-        qtrDueDates.nd_Qtr_VAT_return_DD = qtrDates[1];
-        qtrDueDates.rd_Qtr_VAT_return_DD = qtrDates[2];
-        qtrDueDates.th_Qtr_VAT_return_DD = qtrDates[3];
+          const endDay = Array.isArray(endParsed.day)
+            ? (isLeapYear(endYear) ? endParsed.day[1] : endParsed.day[0])
+            : endParsed.day;
+
+          const endDate = new Date(endYear, endMonthNum - 1, endDay);
+
+          // quarter due date = endDate + 1 year + 28 days
+          const qtrDueDate = addOneYearAnd28Days(endDate);
+
+          // VAT_Return_Due_Date = qtrDueDate + 3 months
+          vatReturnDueDate = addMonths(qtrDueDate, 3);
+
+          // Map dropdown selection to the CRM quarter field
+          const quarterMap = {
+            "1 Jan - 31 Mar": "st_Qtr_VAT_return_DD",
+            "1 Apr - 30 Jun": "nd_Qtr_VAT_return_DD",
+            "1 Jul - 30 Sep": "rd_Qtr_VAT_return_DD",
+            "1 Oct - 31 Dec": "th_Qtr_VAT_return_DD",
+            "1 Feb - 30 Apr": "st_Qtr_VAT_return_DD",
+            "1 May - 31 Jul": "nd_Qtr_VAT_return_DD",
+            "1 Aug - 31 Oct": "rd_Qtr_VAT_return_DD",
+            "1 Nov - 31 Jan": "th_Qtr_VAT_return_DD",
+            "1 Mar - 31 May": "st_Qtr_VAT_return_DD",
+            "1 Jun - 31 Aug": "nd_Qtr_VAT_return_DD",
+            "1 Sep - 30 Nov": "rd_Qtr_VAT_return_DD",
+            "1 Dec - 28/29 Feb": "th_Qtr_VAT_return_DD"
+          };
+
+          currentQuarterField = quarterMap[taxPeriodVat] || null;
+          if (currentQuarterField) {
+            qtrDueDates[currentQuarterField] = qtrDueDate; // store Date object
+          }
+        }
       }
     }
+  } catch (e) {
+    console.error("Error computing quarter dates:", e);
   }
 
+  // -----------------------------
+  // Update Applications1 record first
+  // -----------------------------
   try {
     await ZOHO.CRM.API.updateRecord({
       Entity: "Applications1",
@@ -388,7 +403,7 @@ async function update_record(event = null) {
         Reference_Number: referenceNo,
         Legal_Name_of_Taxable_Person: taxablePerson,
         Tax_Registration_Number_TRN: taxRegNo,
-        Tax_Period_VAT: taxPeriodVat,
+        Tax_Period_VAT_QTR: taxPeriodVat,
         Financial_Year_Ending: financialYear,
         Tax_Period_Ending: taxPeriodEnding,
         Application_Date: appDate,
@@ -397,22 +412,33 @@ async function update_record(event = null) {
       },
     });
 
+    // -----------------------------
+    // Build Accounts payload — only include current quarter and VAT_Return_Due_Date
+    // -----------------------------
+    const updateData = {
+      id: account_id,
+      Legal_Name_of_Taxable_Person: taxablePerson,
+      TRN_Number: taxRegNo,
+      Tax_Period_VAT_QTR: taxPeriodVat,
+      VAT_Status: "Active",
+      Tax_Period_Ending: taxPeriodEnding,
+    };
+
+    if (currentQuarterField && qtrDueDates[currentQuarterField]) {
+      updateData[currentQuarterField] = formatDateYYYYMMDD(qtrDueDates[currentQuarterField]);
+    }
+    if (vatReturnDueDate) {
+      updateData.VAT_Return_Due_Date = formatDateYYYYMMDD(vatReturnDueDate);
+    }
+
     await ZOHO.CRM.API.updateRecord({
       Entity: "Accounts",
-      APIData: {
-        id: account_id,
-        Legal_Name_of_Taxable_Person: taxablePerson,
-        TRN_Number: taxRegNo,
-        Tax_Period_VAT: taxPeriodVat,
-        VAT_Status: "Active",
-        st_Qtr_VAT_return_DD: qtrDueDates.st_Qtr_VAT_return_DD || "",
-        nd_Qtr_VAT_return_DD: qtrDueDates.nd_Qtr_VAT_return_DD || "",
-        rd_Qtr_VAT_return_DD: qtrDueDates.rd_Qtr_VAT_return_DD || "",
-        th_Qtr_VAT_return_DD: qtrDueDates.th_Qtr_VAT_return_DD || ""
-
-      },
+      APIData: updateData,
     });
-    
+
+    // -----------------------------
+    // attach file, proceed blueprint, close popup
+    // -----------------------------
     await uploadFileToCRM();
     await ZOHO.CRM.BLUEPRINT.proceed();
     await ZOHO.CRM.UI.Popup.closeReload();
@@ -423,12 +449,18 @@ async function update_record(event = null) {
       submitBtn.textContent = "Submit";
     }
   }
-
 }
 
-document.getElementById("vat-tax-return").addEventListener("change", cacheFileOnChange);
-document.getElementById("record-form").addEventListener("submit", update_record);
+// -----------------------------
+// Event bindings (keep original IDs)
+// -----------------------------
+const vatInput = document.getElementById("vat-tax-return");
+if (vatInput) vatInput.addEventListener("change", cacheFileOnChange);
 
+const recForm = document.getElementById("record-form");
+if (recForm) recForm.addEventListener("submit", update_record);
+
+// Close widget helper
 async function closeWidget() {
   await ZOHO.CRM.UI.Popup.closeReload().then(console.log);
 }
