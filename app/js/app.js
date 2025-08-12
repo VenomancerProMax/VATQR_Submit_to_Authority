@@ -157,6 +157,21 @@ function updateTaxPeriodEnding() {
   }
 }
 
+document.addEventListener("DOMContentLoaded", function () {
+  const fyField = document.getElementById("financial-year");
+  const taxPeriodField = document.getElementById("tax-period-vat");
+
+  if (fyField) {
+    fyField.addEventListener("change", updateTaxPeriodEnding);
+    fyField.addEventListener("input", updateTaxPeriodEnding);
+  }
+
+  if (taxPeriodField) {
+    taxPeriodField.addEventListener("change", updateTaxPeriodEnding);
+    taxPeriodField.addEventListener("input", updateTaxPeriodEnding);
+  }
+});
+
 function parseDayMonth(text) {
   // Accepts: "1 Dec", "28/29 Feb", "31 Mar"
   const parts = text.trim().split(/\s+/);
