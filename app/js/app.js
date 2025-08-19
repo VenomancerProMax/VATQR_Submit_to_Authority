@@ -29,7 +29,7 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
     const accountData = accountResponse.data[0];
 
     legalNameTaxablePerson = accountData.Legal_Name_of_Taxable_Person;
-    ctTrn = accountData.Corporate_Tax_TRN;
+    ctTrn = accountData.TRN_Number;
     taxPeriodVat = accountData.Tax_Period_VAT_QTR;
 
     var now = new Date();
@@ -300,6 +300,11 @@ function formatDateYYYYMMDD(date) {
 // -----------------------------
 // Update Records
 // -----------------------------
+
+function complete_trigger() {
+  ZOHO.CRM.BLUEPRINT.proceed();
+}
+
 async function update_record(event = null) {
   if (event) event.preventDefault();
 
@@ -439,12 +444,12 @@ async function update_record(event = null) {
       Tax_Period_Ending: taxPeriodEnding,
     };
 
-    if (currentQuarterField && qtrDueDates[currentQuarterField]) {
-      updateData[currentQuarterField] = formatDateYYYYMMDD(qtrDueDates[currentQuarterField]);
-    }
-    if (vatReturnDueDate) {
-      updateData.VAT_Return_Due_Date = formatDateYYYYMMDD(vatReturnDueDate);
-    }
+    // if (currentQuarterField && qtrDueDates[currentQuarterField]) {
+    //   updateData[currentQuarterField] = formatDateYYYYMMDD(qtrDueDates[currentQuarterField]);
+    // }
+    // if (vatReturnDueDate) {
+    //   updateData.VAT_Return_Due_Date = formatDateYYYYMMDD(vatReturnDueDate);
+    // }
 
     await ZOHO.CRM.API.updateRecord({
       Entity: "Accounts",
@@ -479,5 +484,4 @@ if (recForm) recForm.addEventListener("submit", update_record);
 async function closeWidget() {
   await ZOHO.CRM.UI.Popup.closeReload().then(console.log);
 }
-
 ZOHO.embeddedApp.init();
