@@ -425,12 +425,13 @@ async function update_record(event = null) {
         Tax_Registration_Number_TRN: taxRegNo,
         Tax_Period_VAT_QTR: taxPeriodVat,
         Financial_Year_Ending: financialYear,
-        Tax_Period_Ending: taxPeriodEnding,
         Application_Date: appDate,
         Application_Issuance_Date: appDate,
         Tax_Paid: taxPaid,
       },
     });
+
+    //  Tax_Period_Ending: taxPeriodEnding,
 
     // -----------------------------
     // Build Accounts payload — only include current quarter and VAT_Return_Due_Date
@@ -440,10 +441,10 @@ async function update_record(event = null) {
       Legal_Name_of_Taxable_Person: taxablePerson,
       TRN_Number: taxRegNo,
       Tax_Period_VAT_QTR: taxPeriodVat,
-      VAT_Status: "Active",
-      Tax_Period_Ending: taxPeriodEnding,
+      VAT_Status: "Active"
+     
     };
-
+//  Tax_Period_Ending: taxPeriodEnding,
     // if (currentQuarterField && qtrDueDates[currentQuarterField]) {
     //   updateData[currentQuarterField] = formatDateYYYYMMDD(qtrDueDates[currentQuarterField]);
     // }
