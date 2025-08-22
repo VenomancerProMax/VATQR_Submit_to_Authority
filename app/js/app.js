@@ -426,6 +426,7 @@ async function update_record(event = null) {
         Tax_Period_VAT_QTR: taxPeriodVat,
         Financial_Year_Ending: financialYear,
         Application_Date: appDate,
+        Tax_Period_Ending: taxPeriodEnding,
         Application_Issuance_Date: appDate,
         Tax_Paid: taxPaid,
       },
