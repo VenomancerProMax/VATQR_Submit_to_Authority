@@ -4,6 +4,9 @@
 let app_id, account_id;
 let cachedFile = null;
 let cachedBase64 = null;
+// NEW: separate cache for payment-instruction
+let cachedFilePayment = null;
+let cachedBase64Payment = null;
 
 // -----------------------------
 // PageLoad - populate form
@@ -42,7 +45,7 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
 
     updateTaxPeriodEnding();
 
-    ZOHO.CRM.UI.Resize({ height: "90%" }).then(function (data) {
+    ZOHO.CRM.UI.Resize({ height: "100%" }).then(function (data) {
       console.log("Resize result:", data);
     });
   } catch (err) {
@@ -222,7 +225,7 @@ async function cacheFileOnChange(event) {
   if (!file) return;
 
   if (file.size > 20 * 1024 * 1024) {
-    showError("vat-tax-return", "File size must not exceed 20MB.");
+    showError(fileInput.id, "File size must not exceed 20MB.");
     return;
   }
 
@@ -233,18 +236,18 @@ async function cacheFileOnChange(event) {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsArrayBuffer(file);
     });
 
-    let base64Content = base64;
-    if (typeof base64 === "string" && base64.indexOf(",") !== -1) {
-      base64Content = base64.split(",")[1];
+    // cache depending on which input triggered
+    if (fileInput.id === "vat-tax-return") {
+      cachedFile = file;
+      cachedBase64 = base64;
+    } else if (fileInput.id === "payment-instruction") {
+      cachedFilePayment = file;
+      cachedBase64Payment = base64;
     }
 
-    cachedFile = file;
-    cachedBase64 = base64Content;
-
-    // small UX pause to show progress bar
     await new Promise((res) => setTimeout(res, 3000));
     hideUploadBuffer();
   } catch (err) {
@@ -255,19 +258,62 @@ async function cacheFileOnChange(event) {
 }
 
 async function uploadFileToCRM() {
-  if (!cachedFile || !cachedBase64) {
-    throw new Error("No cached file");
+  // attach vat-tax-return
+  if (cachedFile && cachedBase64) {
+    await ZOHO.CRM.API.attachFile({
+      Entity: "Applications1",
+      RecordID: app_id,
+      File: { Name: cachedFile.name, Content: cachedBase64 },
+    });
+  }
+  // NEW: attach payment-instruction if present
+  if (cachedFilePayment && cachedBase64Payment) {
+    await ZOHO.CRM.API.attachFile({
+      Entity: "Applications1",
+      RecordID: app_id,
+      File: { Name: cachedFilePayment.name, Content: cachedBase64Payment },
+    });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const paymentReference = document.getElementById("payment-reference");
+  const paymentInstruction = document.getElementById("payment-instruction");
+  const taxPaid = document.getElementById("tax-paid");
+
+  const paymentRefLabel = document.getElementById("payment-ref-label");
+  const paymentInstLabel = document.getElementById("payment-inst-label");
+
+  function checkTax() {
+    const value = parseFloat(taxPaid.value) || 0;
+
+    if (value > 0) {
+      // Add required + red *
+      paymentReference.setAttribute("required", "required");
+      paymentInstruction.setAttribute("required", "required");
+
+      if (!paymentRefLabel.querySelector(".required-star")) {
+        paymentRefLabel.innerHTML =
+          'Payment Reference <span class="required-star" style="color:red">*</span>';
+      }
+
+      if (!paymentInstLabel.querySelector(".required-star")) {
+        paymentInstLabel.innerHTML =
+          'Payment Instruction </span> <span class="required-star" style="color:red">*</span>';
+      }
+
+    } else {
+      // Remove required + red *
+      paymentReference.removeAttribute("required");
+      paymentInstruction.removeAttribute("required");
+
+      paymentRefLabel.textContent  = "Payment Reference";
+      paymentInstLabel.innerHTML = "Payment Instruction";
+    }
   }
 
-  return await ZOHO.CRM.API.attachFile({
-    Entity: "Applications1",
-    RecordID: app_id,
-    File: {
-      Name: cachedFile.name,
-      Content: cachedBase64,
-    },
-  });
-}
+  taxPaid.addEventListener("input", checkTax);
+});
 
 // -----------------------------
 // Date & formatting
@@ -301,9 +347,9 @@ function formatDateYYYYMMDD(date) {
 // Update Records
 // -----------------------------
 
-function complete_trigger() {
-  ZOHO.CRM.BLUEPRINT.proceed();
-}
+// function complete_trigger() {
+//   ZOHO.CRM.BLUEPRINT.proceed();
+// }
 
 async function update_record(event = null) {
   if (event) event.preventDefault();
@@ -326,6 +372,9 @@ async function update_record(event = null) {
   const taxPeriodEnding = document.getElementById("tax-period-ending")?.value;
   const appDate = document.getElementById("application-date")?.value;
   const taxPaid = document.getElementById("tax-paid")?.value;
+  const paymentRef = document.getElementById("payment-reference")?.value;
+
+  if(!paymentRef && taxPaid > 0) { showError("payment-reference", "Payment Reference is required");}
 
   if (!referenceNo) { showError("reference-number", "Reference Number is required."); hasError = true;}
   if (!taxablePerson) { showError("name-of-taxable-person", "Legal Name of Taxable Person is required."); hasError = true;}
@@ -336,6 +385,8 @@ async function update_record(event = null) {
   if (!appDate) { showError("application-date", "Application Date is required."); hasError = true;}
   if (!taxPaid) { showError("tax-paid", "Tax Paid is required."); hasError = true;}
   if (!cachedFile || !cachedBase64) { showError("vat-tax-return", "Please upload the VAT Tax Return."); hasError = true;}
+  // NEW: check payment-instruction required?
+  if (taxPaid > 0 && (!cachedFilePayment || !cachedBase64Payment)) { showError("payment-instruction", "Please upload the Payment Instruction."); hasError = true;}
 
   if (hasError) {
     if (submitBtn) {
@@ -478,6 +529,9 @@ async function update_record(event = null) {
 // -----------------------------
 const vatInput = document.getElementById("vat-tax-return");
 if (vatInput) vatInput.addEventListener("change", cacheFileOnChange);
+
+const paymentInf = document.getElementById("payment-instruction");
+if(paymentInf) paymentInf.addEventListener("change", cacheFileOnChange)
 
 const recForm = document.getElementById("record-form");
 if (recForm) recForm.addEventListener("submit", update_record);

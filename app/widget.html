@@ -54,19 +54,30 @@
         <input type="date" id="application-date" name="application-date" required />
         <span class="error-message" id="error-application-date"></span>
 
-        <label for="vat-tax-return" style="margin-top: 16px; display: block;">VAT Tax Return 
-          <span title="Drag and drop your file here, or click “Choose File” to upload the VAT Tax Return." style="cursor: help; color: #555;">&#9432;</span>
-          <span style="color: red;">*</span>
-        </label>
-        <input type="file" id="vat-tax-return" name="vat-tax-return" accept=".pdf,.jpg,.jpeg,.png" required />
-        <span class="error-message" id="error-vat-tax-return" style="color: red; font-size: 12px;"></span>
-
         <label for="tax-paid">Tax Paid (AED) <span style="color: red;">*</span></label>
         <div class="input-group">
           <span class="currency">AED</span>
           <input type="number" id="tax-paid" name="tax-paid" min="0" step="0.01" placeholder="0.00" aria-label="Tax Paid in AED" />
         </div>
         <span class="error-message" id="error-tax-paid"></span>
+
+        <label for="payment-reference" id="payment-ref-label">Payment Reference</label>
+        <input type="text" id="payment-reference" name="payment-reference"/>
+        <span class="error-message" id="error-payment-reference"></span>
+
+        <label for="payment-instruction" id="payment-inst-label" style="margin-top: 16px; display: block;">Payment Instruction 
+          <span title="Drag and drop your file here, or click “Choose File” to upload the Payment Instruction." style="cursor: help; color: #555;">&#9432;</span>
+          <span style="color: red;"></span>
+        </label>
+        <input type="file" id="payment-instruction" name="payment-instruction" accept=".pdf,.jpg,.jpeg,.png" required />
+        <span class="error-message" id="error-payment-instruction" style="color: red; font-size: 12px;"></span>
+
+        <label for="vat-tax-return" style="margin-top: 16px; display: block;">VAT Tax Return 
+          <span title="Drag and drop your file here, or click “Choose File” to upload the VAT Tax Return." style="cursor: help; color: #555;">&#9432;</span>
+          <span style="color: red;">*</span>
+        </label>
+        <input type="file" id="vat-tax-return" name="vat-tax-return" accept=".pdf,.jpg,.jpeg,.png" required />
+        <span class="error-message" id="error-vat-tax-return" style="color: red; font-size: 12px;"></span>
 
         <button class="submit-button" type="submit" id="submit_button_id" onclick="complete_trigger()">Submit</button>
       </form>
