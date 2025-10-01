@@ -35,13 +35,9 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
     ctTrn = accountData.TRN_Number;
     taxPeriodVat = accountData.Tax_Period_VAT_QTR;
 
-    var now = new Date();
-    var currentYear = now.getFullYear();
-
     document.getElementById("name-of-taxable-person").value = legalNameTaxablePerson || "";
     document.getElementById("tax-registration-number").value = ctTrn || "";
     document.getElementById("tax-period-vat").value = taxPeriodVat || "";
-    document.getElementById("financial-year").value = currentYear || "";
 
     updateTaxPeriodEnding();
 
@@ -83,36 +79,21 @@ function hideUploadBuffer() {
   if (buffer) buffer.classList.add("hidden");
 }
 
-function validateFinancialYear(fy) {
-  if (!/^\d{4}$/.test(fy)) {
-    return "Enter a four-digit year (e.g., 2025).";
-  }
-  const year = parseInt(fy, 10);
-  if (year < 2025 || year > 2050) {
-    return "Year must be between 2025 and 2050.";
-  }
-  return "";
-}
-
 // -----------------------------
 // Tax period display logic
 // -----------------------------
 function updateTaxPeriodEnding() {
   try {
-    const fyRaw = document.getElementById("financial-year")?.value;
     const taxPeriodValue = document.getElementById("tax-period-vat")?.value;
     const targetField = document.getElementById("tax-period-ending");
 
-    if (!fyRaw || !taxPeriodValue || !targetField) {
+    if (!taxPeriodValue || !targetField) {
       if (targetField) targetField.value = "";
       return;
     }
 
-    const fy = parseInt(fyRaw, 10);
-    if (isNaN(fy)) {
-      targetField.value = "";
-      return;
-    }
+    const now = new Date();
+    let fy = now.getFullYear();
 
     const normalized = taxPeriodValue.replace(/[–—−]/g, "-");
     const parts = normalized.split(/\s*-\s*/);
@@ -139,14 +120,13 @@ function updateTaxPeriodEnding() {
 
     let startYear, endYear;
     if (endMonthNum < startMonthNum) {
-      startYear = fy - 1; // e.g., start = Dec (previous year)
+      startYear = fy - 1;
       endYear = fy;
     } else {
       startYear = fy;
       endYear = fy;
     }
 
-    const startDay = Array.isArray(startParsed.day) ? startParsed.day[0] : startParsed.day;
     const endDay = Array.isArray(endParsed.day)
       ? (isLeapYear(endYear) ? endParsed.day[1] : endParsed.day[0])
       : endParsed.day;
@@ -161,13 +141,7 @@ function updateTaxPeriodEnding() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  const fyField = document.getElementById("financial-year");
   const taxPeriodField = document.getElementById("tax-period-vat");
-
-  if (fyField) {
-    fyField.addEventListener("change", updateTaxPeriodEnding);
-    fyField.addEventListener("input", updateTaxPeriodEnding);
-  }
 
   if (taxPeriodField) {
     taxPeriodField.addEventListener("change", updateTaxPeriodEnding);
@@ -176,13 +150,11 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 function parseDayMonth(text) {
-  // Accepts: "1 Dec", "28/29 Feb", "31 Mar"
   const parts = text.trim().split(/\s+/);
   if (parts.length < 2) return null;
   const dayPart = parts[0].replace(/[.,]/g, "");
   const monthStr = parts.slice(1).join(" ").replace(/[.,]/g, "");
   if (dayPart.includes("/")) {
-    // return array [nonLeap, leap]
     const d = dayPart.split("/").map(s => parseInt(s, 10));
     if (d.some(isNaN)) return null;
     return { day: d, monthStr };
@@ -198,7 +170,7 @@ function monthNameToNumber(m) {
   try {
     const date = new Date(`${m} 1, 2000`);
     if (isNaN(date)) return null;
-    return date.getMonth() + 1; // 1..12
+    return date.getMonth() + 1;
   } catch (e) {
     return null;
   }
@@ -239,7 +211,6 @@ async function cacheFileOnChange(event) {
       reader.readAsArrayBuffer(file);
     });
 
-    // cache depending on which input triggered
     if (fileInput.id === "vat-tax-return") {
       cachedFile = file;
       cachedBase64 = base64;
@@ -258,7 +229,6 @@ async function cacheFileOnChange(event) {
 }
 
 async function uploadFileToCRM() {
-  // attach vat-tax-return
   if (cachedFile && cachedBase64) {
     await ZOHO.CRM.API.attachFile({
       Entity: "Applications1",
@@ -266,7 +236,6 @@ async function uploadFileToCRM() {
       File: { Name: cachedFile.name, Content: cachedBase64 },
     });
   }
-  // NEW: attach payment-instruction if present
   if (cachedFilePayment && cachedBase64Payment) {
     await ZOHO.CRM.API.attachFile({
       Entity: "Applications1",
@@ -276,50 +245,76 @@ async function uploadFileToCRM() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+// -----------------------------
+// Conditional visibility of payment fields
+// -----------------------------
+function checkTaxAndToggleVisibility() {
+  const taxPaid = document.getElementById("tax-paid");
   const paymentReference = document.getElementById("payment-reference");
   const paymentInstruction = document.getElementById("payment-instruction");
-  const taxPaid = document.getElementById("tax-paid");
-
   const paymentRefLabel = document.getElementById("payment-ref-label");
   const paymentInstLabel = document.getElementById("payment-inst-label");
+  
+  const isTaxPaid = parseFloat(taxPaid.value) > 0;
 
-  function checkTax() {
-    const value = parseFloat(taxPaid.value) || 0;
+  if (isTaxPaid) {
+    paymentReference.style.display = 'block';
+    paymentReference.required = true;
+    paymentRefLabel.style.display = 'block';
+    
+    // Add the red asterisk to the label's inner HTML
+    if (!paymentRefLabel.querySelector(".required-star")) {
+      paymentRefLabel.innerHTML = 'Payment Reference <span class="required-star" style="color:red">*</span>';
+    }
 
-    if (value > 0) {
-      // Add required + red *
-      paymentReference.setAttribute("required", "required");
-      paymentInstruction.setAttribute("required", "required");
+    paymentInstruction.style.display = 'block';
+    paymentInstruction.required = true;
+    paymentInstLabel.style.display = 'block';
 
-      if (!paymentRefLabel.querySelector(".required-star")) {
-        paymentRefLabel.innerHTML =
-          'Payment Reference <span class="required-star" style="color:red">*</span>';
-      }
+    if (!paymentInstLabel.querySelector(".required-star")) {
+      paymentInstLabel.innerHTML = 'Payment Instruction <span class="required-star" style="color:red">*</span>';
+    }
 
-      if (!paymentInstLabel.querySelector(".required-star")) {
-        paymentInstLabel.innerHTML =
-          'Payment Instruction </span> <span class="required-star" style="color:red">*</span>';
-      }
+  } else {
+    paymentReference.style.display = 'none';
+    paymentReference.required = false;
+    paymentRefLabel.style.display = 'none';
 
-    } else {
-      // Remove required + red *
-      paymentReference.removeAttribute("required");
-      paymentInstruction.removeAttribute("required");
+    // Remove the red asterisk from the label's inner HTML
+    paymentRefLabel.innerHTML = 'Payment Reference';
 
-      paymentRefLabel.textContent  = "Payment Reference";
-      paymentInstLabel.innerHTML = "Payment Instruction";
+    paymentInstruction.style.display = 'none';
+    paymentInstruction.required = false;
+    paymentInstLabel.style.display = 'none';
+
+    paymentInstLabel.innerHTML = 'Payment Instruction';
+
+    // Clear any previously selected file for payment instruction
+    if (paymentInstruction.value) {
+      paymentInstruction.value = '';
+      cachedFilePayment = null;
+      cachedBase64Payment = null;
+    }
+
+    // Clear any previously entered payment reference
+    if (paymentReference.value) {
+      paymentReference.value = '';
     }
   }
+}
 
-  taxPaid.addEventListener("input", checkTax);
+document.addEventListener("DOMContentLoaded", function () {
+  const taxPaid = document.getElementById("tax-paid");
+  
+  taxPaid.addEventListener("input", checkTaxAndToggleVisibility);
+
+  checkTaxAndToggleVisibility();
 });
 
 // -----------------------------
 // Date & formatting
 // -----------------------------
 function addOneYearAnd28Days(date) {
-  // Accepts a Date object
   const result = new Date(date);
   result.setFullYear(result.getFullYear() + 1);
   result.setDate(result.getDate() + 28);
@@ -347,10 +342,6 @@ function formatDateYYYYMMDD(date) {
 // Update Records
 // -----------------------------
 
-// function complete_trigger() {
-//   ZOHO.CRM.BLUEPRINT.proceed();
-// }
-
 async function update_record(event = null) {
   if (event) event.preventDefault();
 
@@ -363,30 +354,28 @@ async function update_record(event = null) {
     submitBtn.textContent = "Submitting...";
   }
 
-  // collect fields (use same IDs as your form)
   const referenceNo = document.getElementById("reference-number")?.value;
   const taxablePerson = document.getElementById("name-of-taxable-person")?.value;
   const taxRegNo = document.getElementById("tax-registration-number")?.value;
   const taxPeriodVat = document.getElementById("tax-period-vat")?.value;
-  const financialYear = document.getElementById("financial-year")?.value;
   const taxPeriodEnding = document.getElementById("tax-period-ending")?.value;
   const appDate = document.getElementById("application-date")?.value;
   const taxPaid = document.getElementById("tax-paid")?.value;
   const paymentRef = document.getElementById("payment-reference")?.value;
 
-  if(!paymentRef && taxPaid > 0) { showError("payment-reference", "Payment Reference is required");}
-
   if (!referenceNo) { showError("reference-number", "Reference Number is required."); hasError = true;}
   if (!taxablePerson) { showError("name-of-taxable-person", "Legal Name of Taxable Person is required."); hasError = true;}
   if (!taxRegNo) { showError("tax-registration-number", "Tax Registration Number is required."); hasError = true;}
   if (!taxPeriodVat) { showError("tax-period-vat", "Tax Period VAT is required."); hasError = true;}
-  if (!financialYear) { showError("financial-year", "Financial Year is required."); hasError = true;}
   if (!taxPeriodEnding) { showError("tax-period-ending", "Tax Period Ending is required."); hasError = true;}
   if (!appDate) { showError("application-date", "Application Date is required."); hasError = true;}
   if (!taxPaid) { showError("tax-paid", "Tax Paid is required."); hasError = true;}
   if (!cachedFile || !cachedBase64) { showError("vat-tax-return", "Please upload the VAT Tax Return."); hasError = true;}
-  // NEW: check payment-instruction required?
-  if (taxPaid > 0 && (!cachedFilePayment || !cachedBase64Payment)) { showError("payment-instruction", "Please upload the Payment Instruction."); hasError = true;}
+
+  if (parseFloat(taxPaid) > 0) {
+    if (!paymentRef) { showError("payment-reference", "Payment Reference is required."); hasError = true;}
+    if (!cachedFilePayment || !cachedBase64Payment) { showError("payment-instruction", "Please upload the Payment Instruction."); hasError = true;}
+  }
 
   if (hasError) {
     if (submitBtn) {
@@ -396,9 +385,6 @@ async function update_record(event = null) {
     return;
   }
 
-  // -----------------------------
-  // Calculate quarter due date and VAT_Return_Due_Date
-  // -----------------------------
   let qtrDueDates = {};
   let currentQuarterField = null;
   let vatReturnDueDate = null;
@@ -413,10 +399,11 @@ async function update_record(event = null) {
         const startMonthNum = monthNameToNumber(startParsed.monthStr);
         const endMonthNum = monthNameToNumber(endParsed.monthStr);
         if (startMonthNum && endMonthNum) {
-          const fy = parseInt(financialYear, 10);
+          const now = new Date();
+          const fy = now.getFullYear();
+
           let startYear, endYear;
           if (endMonthNum < startMonthNum) {
-            // crosses year boundary, e.g., Dec -> Feb
             startYear = fy - 1;
             endYear = fy;
           } else {
@@ -430,13 +417,10 @@ async function update_record(event = null) {
 
           const endDate = new Date(endYear, endMonthNum - 1, endDay);
 
-          // quarter due date = endDate + 1 year + 28 days
           const qtrDueDate = addOneYearAnd28Days(endDate);
 
-          // VAT_Return_Due_Date = qtrDueDate + 3 months
           vatReturnDueDate = addMonths(qtrDueDate, 3);
 
-          // Map dropdown selection to the CRM quarter field
           const quarterMap = {
             "1 Jan - 31 Mar": "st_Qtr_VAT_return_DD",
             "1 Apr - 30 Jun": "nd_Qtr_VAT_return_DD",
@@ -454,7 +438,7 @@ async function update_record(event = null) {
 
           currentQuarterField = quarterMap[taxPeriodVat] || null;
           if (currentQuarterField) {
-            qtrDueDates[currentQuarterField] = qtrDueDate; // store Date object
+            qtrDueDates[currentQuarterField] = qtrDueDate;
           }
         }
       }
@@ -463,55 +447,40 @@ async function update_record(event = null) {
     console.error("Error computing quarter dates:", e);
   }
 
-  // -----------------------------
-  // Update Applications1 record first
-  // -----------------------------
   try {
+    const apiData = {
+      id: app_id,
+      Reference_Number: referenceNo,
+      Legal_Name_of_Taxable_Person: taxablePerson,
+      Tax_Registration_Number_TRN: taxRegNo,
+      Tax_Period_VAT_QTR: taxPeriodVat,
+      Application_Date: appDate,
+      Tax_Period_Ending: taxPeriodEnding,
+      Application_Issuance_Date: appDate,
+      Tax_Paid: taxPaid,
+    };
+    
+    if (parseFloat(taxPaid) > 0) {
+      apiData.Payment_Reference = paymentRef;
+    }
+
     await ZOHO.CRM.API.updateRecord({
       Entity: "Applications1",
-      APIData: {
-        id: app_id,
-        Reference_Number: referenceNo,
-        Legal_Name_of_Taxable_Person: taxablePerson,
-        Tax_Registration_Number_TRN: taxRegNo,
-        Tax_Period_VAT_QTR: taxPeriodVat,
-        Financial_Year_Ending: financialYear,
-        Application_Date: appDate,
-        Tax_Period_Ending: taxPeriodEnding,
-        Application_Issuance_Date: appDate,
-        Tax_Paid: taxPaid,
-      },
+      APIData: apiData,
     });
 
-    //  Tax_Period_Ending: taxPeriodEnding,
-
-    // -----------------------------
-    // Build Accounts payload — only include current quarter and VAT_Return_Due_Date
-    // -----------------------------
     const updateData = {
       id: account_id,
       Legal_Name_of_Taxable_Person: taxablePerson,
       TRN_Number: taxRegNo,
       Tax_Period_VAT_QTR: taxPeriodVat,
       VAT_Status: "Active"
-     
     };
-//  Tax_Period_Ending: taxPeriodEnding,
-    // if (currentQuarterField && qtrDueDates[currentQuarterField]) {
-    //   updateData[currentQuarterField] = formatDateYYYYMMDD(qtrDueDates[currentQuarterField]);
-    // }
-    // if (vatReturnDueDate) {
-    //   updateData.VAT_Return_Due_Date = formatDateYYYYMMDD(vatReturnDueDate);
-    // }
-
     await ZOHO.CRM.API.updateRecord({
       Entity: "Accounts",
       APIData: updateData,
     });
 
-    // -----------------------------
-    // attach file, proceed blueprint, close popup
-    // -----------------------------
     await uploadFileToCRM();
     await ZOHO.CRM.BLUEPRINT.proceed();
     await ZOHO.CRM.UI.Popup.closeReload();
