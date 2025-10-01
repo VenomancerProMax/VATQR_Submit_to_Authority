@@ -4,7 +4,6 @@
 let app_id, account_id;
 let cachedFile = null;
 let cachedBase64 = null;
-// NEW: separate cache for payment-instruction
 let cachedFilePayment = null;
 let cachedBase64Payment = null;
 
@@ -126,6 +125,10 @@ function updateTaxPeriodEnding() {
       startYear = fy;
       endYear = fy;
     }
+
+    const startDay = Array.isArray(startParsed.day)
+      ? (isLeapYear(startYear) ? startParsed.day[1] : startParsed.day[0])
+      : startParsed.day;
 
     const endDay = Array.isArray(endParsed.day)
       ? (isLeapYear(endYear) ? endParsed.day[1] : endParsed.day[0])
@@ -262,7 +265,6 @@ function checkTaxAndToggleVisibility() {
     paymentReference.required = true;
     paymentRefLabel.style.display = 'block';
     
-    // Add the red asterisk to the label's inner HTML
     if (!paymentRefLabel.querySelector(".required-star")) {
       paymentRefLabel.innerHTML = 'Payment Reference <span class="required-star" style="color:red">*</span>';
     }
@@ -280,7 +282,6 @@ function checkTaxAndToggleVisibility() {
     paymentReference.required = false;
     paymentRefLabel.style.display = 'none';
 
-    // Remove the red asterisk from the label's inner HTML
     paymentRefLabel.innerHTML = 'Payment Reference';
 
     paymentInstruction.style.display = 'none';
@@ -289,14 +290,12 @@ function checkTaxAndToggleVisibility() {
 
     paymentInstLabel.innerHTML = 'Payment Instruction';
 
-    // Clear any previously selected file for payment instruction
     if (paymentInstruction.value) {
       paymentInstruction.value = '';
       cachedFilePayment = null;
       cachedBase64Payment = null;
     }
 
-    // Clear any previously entered payment reference
     if (paymentReference.value) {
       paymentReference.value = '';
     }
