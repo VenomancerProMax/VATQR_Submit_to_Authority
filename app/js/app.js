@@ -13,6 +13,9 @@ let vat_pay_giban_account;
 let ctTrn;
 let taxPeriodVat;
 
+// NEW GLOBAL VARIABLE: Stores the financial year ending date object (Jan 1st of the FY year)
+let financialYearEndingDate = null; 
+
 // -----------------------------
 // PageLoad - populate form
 // -----------------------------
@@ -27,6 +30,22 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
         const applicationData = appResponse.data[0];
         app_id = applicationData.id;
         account_id = applicationData.Account_Name.id;
+        
+        // --- MODIFICATION: Handling Financial_Year_Ending as Number ---
+        const fyEnding = applicationData.Financial_Year_Ending;
+        
+        // Reliably convert the Number value (e.g., 2026) to an integer.
+        // This handles cases where it might be a number or a numeric string from the API response.
+        let year = parseInt(fyEnding, 10);
+        
+        if (!isNaN(year) && year > 1900) { 
+             // Set financialYearEndingDate to Jan 1st of the extracted year (e.g., Jan 1, 2026)
+             financialYearEndingDate = new Date(year, 0, 1); 
+        } else {
+            console.warn("Could not reliably parse year from Financial_Year_Ending value. Falling back to current year.");
+            financialYearEndingDate = new Date(); // Fallback to current date/year (2025 in current context)
+        }
+        // -----------------------------------------------------------
 
         const accountResponse = await ZOHO.CRM.API.getRecord({
             Entity: "Accounts",
@@ -37,7 +56,6 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
         const accountData = accountResponse.data[0];
 
         legalNameTaxablePerson = accountData.Legal_Name_of_Taxable_Person;
-        // Updated to use the variable from the account data
         vat_pay_giban_account = accountData.VAT_Pay_GIBAN; 
         ctTrn = accountData.TRN_Number;
         taxPeriodVat = accountData.Tax_Period_VAT_QTR;
@@ -46,11 +64,10 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
         document.getElementById("tax-registration-number").value = ctTrn || "";
         document.getElementById("tax-period-vat").value = taxPeriodVat || "";
         
-        // Populate the Pay GIBAN field here using the global variable
         document.getElementById("pay-giban").value = vat_pay_giban_account || "";
 
         updateTaxPeriodEnding();
-        checkTaxAndToggleVisibility(); // Call after populating fields
+        checkTaxAndToggleVisibility(); 
 
         ZOHO.CRM.UI.Resize({ height: "100%" }).then(function (data) {
             console.log("Resize result:", data);
@@ -77,7 +94,7 @@ function showError(fieldId, message) {
 function showUploadBuffer() {
     const buffer = document.getElementById("upload-buffer");
     const bar = document.getElementById("upload-progress");
-    if (buffer) buffer.classList.remove("hidden");
+if (buffer) buffer.classList.remove("hidden");
     if (bar) {
         bar.classList.remove("animate");
         void bar.offsetWidth;
@@ -103,8 +120,9 @@ function updateTaxPeriodEnding() {
             return;
         }
 
-        const now = new Date();
-        let fy = now.getFullYear();
+        // Get the Financial Year Ending year (e.g., 2026)
+        const referenceDate = financialYearEndingDate || new Date(); 
+        let fy = referenceDate.getFullYear();
 
         const normalized = taxPeriodValue.replace(/[–—−]/g, "-");
         const parts = normalized.split(/\s*-\s*/);
@@ -130,10 +148,13 @@ function updateTaxPeriodEnding() {
         }
 
         let startYear, endYear;
+        // Logic to determine year based on cross-quarter periods
         if (endMonthNum < startMonthNum) {
+            // Period crosses year boundary (e.g., Nov - Jan). Jan is in the FY year (fy), Nov is in the previous year (fy-1)
             startYear = fy - 1;
             endYear = fy;
         } else {
+            // Period is contained within the financial year
             startYear = fy;
             endYear = fy;
         }
@@ -248,7 +269,7 @@ async function uploadFileToCRM() {
         await ZOHO.CRM.API.attachFile({
             Entity: "Applications1",
             RecordID: app_id,
-            File: { Name: cachedFile.name, Content: cachedBase64 },
+            File: { Name: cachedFile.name, Content: cachedBase64 }, 
         });
     }
     // Only upload payment instruction if it exists (i.e., if tax was paid)
@@ -290,7 +311,7 @@ function checkTaxAndToggleVisibility() {
 
         // Payment Instruction (File Upload)
         paymentInstructionField.style.display = 'block';
-        paymentInstructionField.required = true; // Required for form submission, handled in update_record
+        paymentInstructionField.required = true; 
         paymentInstLabel.style.display = 'block';
         if (!paymentInstLabel.querySelector(".required-star")) {
             paymentInstLabel.innerHTML = 'Payment Instruction <span class="required-star" style="color:red">*</span>';
@@ -330,17 +351,13 @@ function checkTaxAndToggleVisibility() {
         payGibanField.required = false;
         payGibanLabel.style.display = 'none';
         payGibanLabel.innerHTML = 'Pay (GIBAN)';
-        // Note: We don't clear payGibanField.value here since it's populated on PageLoad
     }
 }
 
 document.addEventListener("DOMContentLoaded", function () {
     const taxPaid = document.getElementById("tax-paid");
     
-    // Bind the visibility toggle to input changes on the Tax Paid field
     taxPaid.addEventListener("input", checkTaxAndToggleVisibility);
-
-    // Initial check on load
     checkTaxAndToggleVisibility();
 });
 
@@ -419,7 +436,6 @@ async function update_record(event = null) {
             showError("pay-giban", "Pay (GIBAN) is required.");
             hasError = true;
         }
-        // Check for cached file for payment instruction
         if (!cachedFilePayment || !cachedBase64Payment) 
         { showError("payment-instruction", "Please upload the Payment Instruction."); 
             hasError = true;
@@ -448,14 +464,18 @@ async function update_record(event = null) {
                 const startMonthNum = monthNameToNumber(startParsed.monthStr);
                 const endMonthNum = monthNameToNumber(endParsed.monthStr);
                 if (startMonthNum && endMonthNum) {
-                    const now = new Date();
-                    const fy = now.getFullYear();
+                    
+                    // Use the fetched Financial Year Ending Date's year
+                    const referenceDate = financialYearEndingDate || new Date(); 
+                    const fy = referenceDate.getFullYear();
 
                     let startYear, endYear;
                     if (endMonthNum < startMonthNum) {
+                        // Period crosses year boundary (e.g., Nov - Jan)
                         startYear = fy - 1;
                         endYear = fy;
                     } else {
+                        // Period is contained within the financial year
                         startYear = fy;
                         endYear = fy;
                     }
@@ -526,7 +546,7 @@ async function update_record(event = null) {
             TRN_Number: taxRegNo,
             Tax_Period_VAT_QTR: taxPeriodVat,
             VAT_Status: "Active",
-            VAT_Pay_GIBAN: payGibanRef // Updated to always save GIBAN back to Account
+            VAT_Pay_GIBAN: payGibanRef
         };
         await ZOHO.CRM.API.updateRecord({
             Entity: "Accounts",
