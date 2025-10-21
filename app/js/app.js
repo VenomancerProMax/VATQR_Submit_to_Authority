@@ -29,7 +29,15 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
         });
         const applicationData = appResponse.data[0];
         app_id = applicationData.id;
-        account_id = applicationData.Account_Name.id;
+        
+        // Check for Account ID and handle if missing
+        if (!applicationData.Account_Name || !applicationData.Account_Name.id) {
+            console.error("Application record is missing a linked Account ID. Cannot proceed with data fetch.");
+            // Prevent setting account_id if null/undefined
+            // The submission logic will catch this later, but useful to log now.
+        } else {
+            account_id = applicationData.Account_Name.id;
+        }
         
         // --- MODIFICATION: Handling Financial_Year_Ending as Number ---
         const fyEnding = applicationData.Financial_Year_Ending;
@@ -222,6 +230,7 @@ function isLeapYear(year) {
     return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
 }
 
+
 // -----------------------------
 // File caching & upload
 // -----------------------------
@@ -413,6 +422,7 @@ async function update_record(event = null) {
     const taxPaid = document.getElementById("tax-paid")?.value;
     const paymentRef = document.getElementById("payment-reference")?.value;
     const payGibanRef = document.getElementById("pay-giban")?.value;
+    const safe_account_id = account_id ? account_id.trim() : "";
 
     // --- Validation Checks ---
     if (!referenceNo) { showError("reference-number", "Reference Number is required."); hasError = true;}
@@ -423,6 +433,11 @@ async function update_record(event = null) {
     if (!appDate) { showError("application-date", "Application Date is required."); hasError = true;}
     if (!taxPaid) { showError("tax-paid", "Tax Paid is required."); hasError = true;}
     if (!cachedFile || !cachedBase64) { showError("vat-tax-return", "Please upload the VAT Tax Return."); hasError = true;}
+    if (!safe_account_id) {
+    showError("submit_button_id", "Error: Associated Account ID is missing. Cannot proceed.");
+    hasError = true;
+    console.error("FATAL ERROR: Account ID is missing.");
+  }
 
     // Conditional Validation
     if (parseFloat(taxPaid) > 0) {
@@ -540,18 +555,21 @@ async function update_record(event = null) {
             APIData: apiData,
         });
 
-        const updateData = {
-            id: account_id,
-            Legal_Name_of_Taxable_Person: taxablePerson,
-            TRN_Number: taxRegNo,
-            Tax_Period_VAT_QTR: taxPeriodVat,
-            VAT_Status: "Active",
-            VAT_Pay_GIBAN: payGibanRef
+
+        // Pass ALL required data to the Deluge function via JSON string
+        const func_name = "ta_vatqr_submit_to_auth_update_account";
+        const req_data = {
+            "arguments": JSON.stringify({
+                "account_id": safe_account_id,
+                "legal_taxable_person": taxablePerson,
+                "trn_number": taxRegNo,
+                "tax_period_vat_qtr": taxPeriodVat,
+                "vat_pay_giban":payGibanRef
+            })
         };
-        await ZOHO.CRM.API.updateRecord({
-            Entity: "Accounts",
-            APIData: updateData,
-        });
+
+        const accountResponse = await ZOHO.CRM.FUNCTIONS.execute(func_name, req_data);
+        console.log("Account Update Function Response:", accountResponse);
 
         await uploadFileToCRM();
         await ZOHO.CRM.BLUEPRINT.proceed();
