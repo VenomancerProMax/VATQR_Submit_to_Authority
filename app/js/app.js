@@ -1,603 +1,282 @@
-// -----------------------------
-// Global state / varialbles
-// -----------------------------
 let app_id, account_id;
 let cachedFile = null;
 let cachedBase64 = null;
 let cachedFilePayment = null;
 let cachedBase64Payment = null;
+let legalNameTaxablePerson, vat_pay_giban_account, ctTrn, taxPeriodVat;
+let financialYearEndingDate = null;
 
-// New global variables to hold account data for Pay GIBAN
-let legalNameTaxablePerson;
-let vat_pay_giban_account;
-let ctTrn;
-let taxPeriodVat;
+function showModal(type, title, message) {
+  const modal = document.getElementById("custom-modal");
+  const iconSuccess = document.getElementById("modal-icon-success");
+  const iconError = document.getElementById("modal-icon-error");
+  const modalBtn = document.getElementById("modal-close");
+  
+  document.getElementById("modal-title").textContent = title;
+  document.getElementById("modal-message").textContent = message;
+  
+  modalBtn.onclick = closeModal;
 
-// NEW GLOBAL VARIABLE: Stores the financial year ending date object (Jan 1st of the FY year)
-let financialYearEndingDate = null; 
+  if (type === "success") { 
+    iconSuccess.classList.remove("hidden"); 
+    iconError.classList.add("hidden");
+    
+    modalBtn.onclick = async () => {
+      modalBtn.disabled = true;
+      modalBtn.textContent = "Finalizing...";
+      
+      try {
+        // 1. Trigger the Blueprint transition
+        await ZOHO.CRM.BLUEPRINT.proceed();
+        
+        // 2. Longer delay (1 second) to ensure the backend process is done
+        setTimeout(() => {
+          // 3. Force the TOP window (the actual CRM) to reload its current URL
+          // This is the most "nuclear" reload option available in JS
+          try {
+            top.location.assign(top.location.href);
+          } catch (e) {
+            // Fallback if assign is blocked
+            top.location.href = top.location.href;
+          }
+        }, 1000);
 
-// -----------------------------
-// PageLoad - populate form
-// -----------------------------
-ZOHO.embeddedApp.on("PageLoad", async (entity) => {
-    try {
-        const entity_id = entity.EntityId;
-        const appResponse = await ZOHO.CRM.API.getRecord({
-            Entity: "Applications1",
-            approved: "both",
-            RecordID: entity_id,
+      } catch (e) {
+        console.error("Blueprint error", e);
+        // If it fails, still try to close the popup
+        ZOHO.CRM.UI.Popup.closeReload().catch(() => {
+           top.location.reload(true);
         });
-        const applicationData = appResponse.data[0];
-        app_id = applicationData.id;
-        
-        // Check for Account ID and handle if missing
-        if (!applicationData.Account_Name || !applicationData.Account_Name.id) {
-            console.error("Application record is missing a linked Account ID. Cannot proceed with data fetch.");
-            // Prevent setting account_id if null/undefined
-            // The submission logic will catch this later, but useful to log now.
-        } else {
-            account_id = applicationData.Account_Name.id;
-        }
-        
-        // --- MODIFICATION: Handling Financial_Year_Ending as Number ---
-        const fyEnding = applicationData.Financial_Year_Ending;
-        
-        // Reliably convert the Number value (e.g., 2026) to an integer.
-        // This handles cases where it might be a number or a numeric string from the API response.
-        let year = parseInt(fyEnding, 10);
-        
-        if (!isNaN(year) && year > 1900) { 
-             // Set financialYearEndingDate to Jan 1st of the extracted year (e.g., Jan 1, 2026)
-             financialYearEndingDate = new Date(year, 0, 1); 
-        } else {
-            console.warn("Could not reliably parse year from Financial_Year_Ending value. Falling back to current year.");
-            financialYearEndingDate = new Date(); // Fallback to current date/year (2025 in current context)
-        }
-        // -----------------------------------------------------------
+      }
+    };
+  } else { 
+    iconSuccess.classList.add("hidden"); 
+    iconError.classList.remove("hidden"); 
+  }
+  
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+}
 
-        const accountResponse = await ZOHO.CRM.API.getRecord({
-            Entity: "Accounts",
-            approved: "both",
-            RecordID: account_id,
-        });
+function closeModal() {
+  const modal = document.getElementById("custom-modal");
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+}
 
-        const accountData = accountResponse.data[0];
-
-        legalNameTaxablePerson = accountData.Legal_Name_of_Taxable_Person;
-        vat_pay_giban_account = accountData.VAT_Pay_GIBAN; 
-        ctTrn = accountData.TRN_Number;
-        taxPeriodVat = accountData.Tax_Period_VAT_QTR;
-
-        document.getElementById("name-of-taxable-person").value = legalNameTaxablePerson || "";
-        document.getElementById("tax-registration-number").value = ctTrn || "";
-        document.getElementById("tax-period-vat").value = taxPeriodVat || "";
-        
-        document.getElementById("pay-giban").value = vat_pay_giban_account || "";
-
-        updateTaxPeriodEnding();
-        checkTaxAndToggleVisibility(); 
-
-        ZOHO.CRM.UI.Resize({ height: "100%" }).then(function (data) {
-            console.log("Resize result:", data);
-        });
-    } catch (err) {
-        console.error(err);
-    }
-});
-
-// -----------------------------
-// Small UI helpers & validators
-// -----------------------------
 function clearErrors() {
-    document.querySelectorAll(".error-message").forEach((span) => {
-        span.textContent = "";
-    });
+  document.querySelectorAll(".error-message").forEach(span => span.textContent = "");
 }
 
 function showError(fieldId, message) {
-    const errorSpan = document.getElementById(`error-${fieldId}`);
-    if (errorSpan) errorSpan.textContent = message;
+  const errorSpan = document.getElementById(`error-${fieldId}`);
+  if (errorSpan) errorSpan.textContent = message;
 }
 
-function showUploadBuffer() {
-    const buffer = document.getElementById("upload-buffer");
-    const bar = document.getElementById("upload-progress");
-if (buffer) buffer.classList.remove("hidden");
-    if (bar) {
-        bar.classList.remove("animate");
-        void bar.offsetWidth;
-        bar.classList.add("animate");
-    }
+function showUploadBuffer(msg = "Processing...") {
+  const buffer = document.getElementById("upload-buffer");
+  document.getElementById("upload-title").textContent = msg;
+  buffer.classList.remove("hidden");
 }
 
 function hideUploadBuffer() {
-    const buffer = document.getElementById("upload-buffer");
-    if (buffer) buffer.classList.add("hidden");
+  document.getElementById("upload-buffer").classList.add("hidden");
 }
 
-// -----------------------------
-// Tax period display logic
-// -----------------------------
-function updateTaxPeriodEnding() {
-    try {
-        const taxPeriodValue = document.getElementById("tax-period-vat")?.value;
-        const targetField = document.getElementById("tax-period-ending");
-
-        if (!taxPeriodValue || !targetField) {
-            if (targetField) targetField.value = "";
-            return;
-        }
-
-        // Get the Financial Year Ending year (e.g., 2026)
-        const referenceDate = financialYearEndingDate || new Date(); 
-        let fy = referenceDate.getFullYear();
-
-        const normalized = taxPeriodValue.replace(/[–—−]/g, "-");
-        const parts = normalized.split(/\s*-\s*/);
-
-        if (parts.length < 2) {
-            targetField.value = "";
-            return;
-        }
-
-        const startParsed = parseDayMonth(parts[0].trim());
-        const endParsed = parseDayMonth(parts[1].trim());
-
-        if (!startParsed || !endParsed) {
-            targetField.value = "";
-            return;
-        }
-
-        const startMonthNum = monthNameToNumber(startParsed.monthStr);
-        const endMonthNum = monthNameToNumber(endParsed.monthStr);
-        if (!startMonthNum || !endMonthNum) {
-            targetField.value = "";
-            return;
-        }
-
-        let startYear, endYear;
-        // Logic to determine year based on cross-quarter periods
-        if (endMonthNum < startMonthNum) {
-            // Period crosses year boundary (e.g., Nov - Jan). Jan is in the FY year (fy), Nov is in the previous year (fy-1)
-            startYear = fy - 1;
-            endYear = fy;
-        } else {
-            // Period is contained within the financial year
-            startYear = fy;
-            endYear = fy;
-        }
-
-        const startDay = Array.isArray(startParsed.day)
-            ? (isLeapYear(startYear) ? startParsed.day[1] : startParsed.day[0])
-            : startParsed.day;
-
-        const endDay = Array.isArray(endParsed.day)
-            ? (isLeapYear(endYear) ? endParsed.day[1] : endParsed.day[0])
-            : endParsed.day;
-
-        const startFormatted = formatPrettyDate(startDay, startMonthNum, startYear);
-        const endFormatted = formatPrettyDate(endDay, endMonthNum, endYear);
-
-        targetField.value = `${startFormatted} - ${endFormatted}`;
-    } catch (e) {
-        console.error("updateTaxPeriodEnding error:", e);
-    }
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-    const taxPeriodField = document.getElementById("tax-period-vat");
-
-    if (taxPeriodField) {
-        taxPeriodField.addEventListener("change", updateTaxPeriodEnding);
-        taxPeriodField.addEventListener("input", updateTaxPeriodEnding);
-    }
+ZOHO.embeddedApp.on("PageLoad", async (entity) => {
+  try {
+    const appResp = await ZOHO.CRM.API.getRecord({ Entity: "Applications1", RecordID: entity.EntityId });
+    const appData = appResp.data[0];
+    app_id = appData.id;
+    account_id = appData.Account_Name?.id || "";
+    
+    const fyEnding = appData.Financial_Year_Ending;
+    let year = parseInt(fyEnding, 10);
+    financialYearEndingDate = (!isNaN(year) && year > 1900) ? new Date(year, 0, 1) : new Date();
+    
+    const accResp = await ZOHO.CRM.API.getRecord({ Entity: "Accounts", RecordID: account_id });
+    const accData = accResp.data[0];
+    
+    legalNameTaxablePerson = accData.Legal_Name_of_Taxable_Person;
+    vat_pay_giban_account = accData.VAT_Pay_GIBAN;
+    ctTrn = accData.TRN_Number;
+    taxPeriodVat = accData.Tax_Period_VAT_QTR;
+    
+    document.getElementById("name-of-taxable-person").value = legalNameTaxablePerson || "";
+    document.getElementById("tax-registration-number").value = ctTrn || "";
+    document.getElementById("tax-period-vat").value = taxPeriodVat || "";
+    document.getElementById("pay-giban").value = vat_pay_giban_account || "";
+    
+    updateTaxPeriodEnding();
+    checkTaxAndToggleVisibility();
+  } catch (err) { console.error(err); }
 });
 
-function parseDayMonth(text) {
-    const parts = text.trim().split(/\s+/);
-    if (parts.length < 2) return null;
-    const dayPart = parts[0].replace(/[.,]/g, "");
-    const monthStr = parts.slice(1).join(" ").replace(/[.,]/g, "");
-    if (dayPart.includes("/")) {
-        const d = dayPart.split("/").map(s => parseInt(s, 10));
-        if (d.some(isNaN)) return null;
-        return { day: d, monthStr };
-    } else {
-        const dnum = parseInt(dayPart, 10);
-        if (isNaN(dnum)) return null;
-        return { day: dnum, monthStr };
-    }
+function updateTaxPeriodEnding() {
+  const val = document.getElementById("tax-period-vat")?.value;
+  const target = document.getElementById("tax-period-ending");
+  if (!val || !target) return;
+  
+  const refDate = financialYearEndingDate || new Date();
+  let fy = refDate.getFullYear();
+  const normalized = val.replace(/[–—−]/g, "-");
+  const parts = normalized.split(/\s*-\s*/);
+  if (parts.length < 2) return;
+  
+  const startP = parseDayMonth(parts[0]);
+  const endP = parseDayMonth(parts[1]);
+  if (!startP || !endP) return;
+  
+  const sM = monthNameToNumber(startP.monthStr);
+  const eM = monthNameToNumber(endP.monthStr);
+  
+  let sY = (eM < sM) ? fy - 1 : fy;
+  let eY = fy;
+  
+  const sD = Array.isArray(startP.day) ? (isLeapYear(sY) ? startP.day[1] : startP.day[0]) : startP.day;
+  const eD = Array.isArray(endP.day) ? (isLeapYear(eY) ? endP.day[1] : endP.day[0]) : endP.day;
+  
+  target.value = `${formatPrettyDate(sD, sM, sY)} - ${formatPrettyDate(eD, eM, eY)}`;
+}
+
+function parseDayMonth(t) {
+  const p = t.trim().split(/\s+/);
+  if (p.length < 2) return null;
+  const dPart = p[0].replace(/[.,]/g, "");
+  const mStr = p.slice(1).join(" ").replace(/[.,]/g, "");
+  if (dPart.includes("/")) {
+    const d = dPart.split("/").map(s => parseInt(s, 10));
+    return { day: d, monthStr: mStr };
+  }
+  return { day: parseInt(dPart, 10), monthStr: mStr };
 }
 
 function monthNameToNumber(m) {
-    if (!m) return null;
-    try {
-        const date = new Date(`${m} 1, 2000`);
-        if (isNaN(date)) return null;
-        return date.getMonth() + 1;
-    } catch (e) {
-        return null;
-    }
+  const d = new Date(`${m} 1, 2000`);
+  return isNaN(d) ? null : d.getMonth() + 1;
 }
 
-function formatPrettyDate(day, monthNum, year) {
-    const d = parseInt(day, 10);
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${monthNames[monthNum - 1]} ${d}, ${year}`;
+function formatPrettyDate(d, m, y) {
+  const mNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${mNames[m - 1]} ${d}, ${y}`;
 }
 
-function isLeapYear(year) {
-    return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
+
+async function handleFile(file, type) {
+  clearErrors();
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) {
+    showModal("error", "File Too Large", "Max size is 10MB.");
+    return;
+  }
+  document.getElementById(`file-name-${type}`).textContent = `File: ${file.name}`;
+  const base64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  if (type === 'vat') { cachedFile = file; cachedBase64 = base64; }
+  else { cachedFilePayment = file; cachedBase64Payment = base64; }
 }
 
-
-// -----------------------------
-// File caching & upload
-// -----------------------------
-async function cacheFileOnChange(event) {
-    clearErrors();
-
-    const fileInput = event.target;
-    const file = fileInput?.files[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-        showError(fileInput.id, "File size must not exceed 10MB.");
-        return;
+function setupDropZone(zoneId, inputId, type) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragover");
+    if (e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      handleFile(e.dataTransfer.files[0], type);
     }
-
-    showUploadBuffer();
-
-    try {
-        const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(file);
-        });
-
-        if (fileInput.id === "vat-tax-return") {
-            cachedFile = file;
-            cachedBase64 = base64;
-        } else if (fileInput.id === "payment-instruction") {
-            cachedFilePayment = file;
-            cachedBase64Payment = base64;
-        }
-
-        await new Promise((res) => setTimeout(res, 3000));
-        hideUploadBuffer();
-    } catch (err) {
-        console.error("Error caching file:", err);
-        hideUploadBuffer();
-        showError("vat-tax-return", "Failed to read file.");
-    }
+  });
+  input.addEventListener("change", (e) => handleFile(e.target.files[0], type));
 }
 
-async function uploadFileToCRM() {
-    if (cachedFile && cachedBase64) {
-        await ZOHO.CRM.API.attachFile({
-            Entity: "Applications1",
-            RecordID: app_id,
-            File: { Name: cachedFile.name, Content: cachedBase64 }, 
-        });
-    }
-    // Only upload payment instruction if it exists (i.e., if tax was paid)
-    if (cachedFilePayment && cachedBase64Payment) {
-        await ZOHO.CRM.API.attachFile({
-            Entity: "Applications1",
-            RecordID: app_id,
-            File: { Name: cachedFilePayment.name, Content: cachedBase64Payment },
-        });
-    }
-}
-
-// -----------------------------
-// Conditional visibility of payment fields
-// -----------------------------
 function checkTaxAndToggleVisibility() {
-    const taxPaidField = document.getElementById("tax-paid");
-    const paymentReferenceField = document.getElementById("payment-reference");
-    const paymentRefLabel = document.getElementById("payment-ref-label");
-    const paymentInstructionField = document.getElementById("payment-instruction");
-    const paymentInstLabel = document.getElementById("payment-inst-label");
-    const payGibanField = document.getElementById("pay-giban");
-    const payGibanLabel = document.getElementById("pay-giban-label");
-
-    // Convert the tax paid value to a number for comparison
-    const taxPaidValue = parseFloat(taxPaidField.value) || 0;
-    const isTaxPaid = taxPaidValue > 0;
-
-    if (isTaxPaid) {
-        // Show fields and make them required
-        
-        // Payment Reference
-        paymentReferenceField.style.display = 'block';
-        paymentReferenceField.required = true;
-        paymentRefLabel.style.display = 'block';
-        if (!paymentRefLabel.querySelector(".required-star")) {
-            paymentRefLabel.innerHTML = 'Payment Reference <span class="required-star" style="color:red">*</span>';
-        }
-
-        // Payment Instruction (File Upload)
-        paymentInstructionField.style.display = 'block';
-        paymentInstructionField.required = true; 
-        paymentInstLabel.style.display = 'block';
-        if (!paymentInstLabel.querySelector(".required-star")) {
-            paymentInstLabel.innerHTML = 'Payment Instruction <span class="required-star" style="color:red">*</span>';
-        }
-
-        // Pay GIBAN
-        payGibanField.style.display = 'block';
-        payGibanField.required = true;
-        payGibanLabel.style.display = 'block';
-        if (!payGibanLabel.querySelector(".required-star")) {
-            payGibanLabel.innerHTML = 'Pay (GIBAN) <span class="required-star" style="color:red">*</span>';
-        }
-
-    } else {
-        // Hide fields, remove required status, and clear values/files
-        
-        // Payment Reference
-        paymentReferenceField.style.display = 'none';
-        paymentReferenceField.required = false;
-        paymentRefLabel.style.display = 'none';
-        paymentRefLabel.innerHTML = 'Payment Reference';
-        if (paymentReferenceField.value) paymentReferenceField.value = '';
-
-        // Payment Instruction
-        paymentInstructionField.style.display = 'none';
-        paymentInstructionField.required = false;
-        paymentInstLabel.style.display = 'none';
-        paymentInstLabel.innerHTML = 'Payment Instruction';
-        if (paymentInstructionField.value) {
-            paymentInstructionField.value = '';
-            cachedFilePayment = null;
-            cachedBase64Payment = null;
-        }
-
-        // Pay GIBAN
-        payGibanField.style.display = 'none';
-        payGibanField.required = false;
-        payGibanLabel.style.display = 'none';
-        payGibanLabel.innerHTML = 'Pay (GIBAN)';
-    }
+  const val = parseFloat(document.getElementById("tax-paid").value) || 0;
+  const isPaid = val > 0;
+  document.getElementById("payment-section").style.display = isPaid ? "block" : "none";
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-    const taxPaid = document.getElementById("tax-paid");
+async function update_record(event) {
+  event.preventDefault();
+  clearErrors();
+  let hasError = false;
+  const fields = ["reference-number", "name-of-taxable-person", "tax-registration-number", "tax-period-vat", "tax-period-ending", "application-date", "tax-paid"];
+  
+  fields.forEach(f => { if (!document.getElementById(f).value.trim()) { showError(f, "Required"); hasError = true; } });
+  
+  if (!cachedFile) { showError("vat-tax-return", "Upload required"); hasError = true; }
+  
+  const taxVal = parseFloat(document.getElementById("tax-paid").value) || 0;
+  if (taxVal > 0) {
+    if (!document.getElementById("payment-reference").value.trim()) { showError("payment-reference", "Required"); hasError = true; }
+    if (!document.getElementById("pay-giban").value.trim()) { showError("pay-giban", "Required"); hasError = true; }
+    if (!cachedFilePayment) { showError("payment-instruction", "Upload required"); hasError = true; }
+  }
+  
+  if (hasError) return;
+  
+  const btn = document.getElementById("submit_button_id");
+  btn.disabled = true;
+  btn.textContent = "Updating...";
+  showUploadBuffer("Submitting...");
+  
+  try {
+    const apiData = {
+      id: app_id,
+      Reference_Number: document.getElementById("reference-number").value,
+      Legal_Name_of_Taxable_Person: document.getElementById("name-of-taxable-person").value,
+      Tax_Registration_Number_TRN: document.getElementById("tax-registration-number").value,
+      Tax_Period_VAT_QTR: document.getElementById("tax-period-vat").value,
+      Application_Date: document.getElementById("application-date").value,
+      Tax_Period_Ending: document.getElementById("tax-period-ending").value,
+      Tax_Paid: taxVal
+    };
     
-    taxPaid.addEventListener("input", checkTaxAndToggleVisibility);
-    checkTaxAndToggleVisibility();
-});
-
-// -----------------------------
-// Date & formatting
-// -----------------------------
-function addOneYearAnd28Days(date) {
-    const result = new Date(date);
-    result.setFullYear(result.getFullYear() + 1);
-    result.setDate(result.getDate() + 28);
-    return result;
+    if (taxVal > 0) {
+      apiData.Payment_Reference = document.getElementById("payment-reference").value;
+      apiData.Pay_GIBAN = document.getElementById("pay-giban").value;
+    }
+    
+    await ZOHO.CRM.API.updateRecord({ Entity: "Applications1", APIData: apiData });
+    
+    await ZOHO.CRM.FUNCTIONS.execute("ta_vatqr_submit_to_auth_update_account", {
+      arguments: JSON.stringify({
+        account_id,
+        legal_taxable_person: apiData.Legal_Name_of_Taxable_Person,
+        trn_number: apiData.Tax_Registration_Number_TRN,
+        tax_period_vat_qtr: apiData.Tax_Period_VAT_QTR,
+        vat_pay_giban: apiData.Pay_GIBAN || ""
+      })
+    });
+    
+    await ZOHO.CRM.API.attachFile({ Entity: "Applications1", RecordID: app_id, File: { Name: cachedFile.name, Content: cachedBase64 } });
+    
+    if (cachedFilePayment) {
+      await ZOHO.CRM.API.attachFile({ Entity: "Applications1", RecordID: app_id, File: { Name: cachedFilePayment.name, Content: cachedBase64Payment } });
+    }
+    
+    hideUploadBuffer();
+    showModal("success", "Success!", "Application processed. Click Ok to reload.");
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Submit";
+    hideUploadBuffer();
+    showModal("error", "Failed", "Submission failed. Please try again.");
+  }
 }
 
-function addMonths(date, months) {
-    const result = new Date(date);
-    result.setMonth(result.getMonth() + months);
-    return result;
-}
+document.getElementById("tax-paid").addEventListener("input", checkTaxAndToggleVisibility);
+document.getElementById("tax-period-vat").addEventListener("change", updateTaxPeriodEnding);
+document.getElementById("record-form").addEventListener("submit", update_record);
+setupDropZone("drop-zone-vat", "vat-tax-return", "vat");
+setupDropZone("drop-zone-pay", "payment-instruction", "pay");
 
-function formatDateYYYYMMDD(date) {
-    if (!(date instanceof Date) || isNaN(date)) {
-        console.error("Invalid date passed to formatDateYYYYMMDD:", date);
-        return "";
-    }
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-}
-
-// -----------------------------
-// Update Records
-// -----------------------------
-
-async function update_record(event = null) {
-    if (event) event.preventDefault();
-
-    clearErrors();
-
-    let hasError = false;
-    const submitBtn = document.getElementById("submit_button_id");
-    if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Submitting...";
-    }
-
-    const referenceNo = document.getElementById("reference-number")?.value;
-    const taxablePerson = document.getElementById("name-of-taxable-person")?.value;
-    const taxRegNo = document.getElementById("tax-registration-number")?.value;
-    const taxPeriodVat = document.getElementById("tax-period-vat")?.value;
-    const taxPeriodEnding = document.getElementById("tax-period-ending")?.value;
-    const appDate = document.getElementById("application-date")?.value;
-    const taxPaid = document.getElementById("tax-paid")?.value;
-    const paymentRef = document.getElementById("payment-reference")?.value;
-    const payGibanRef = document.getElementById("pay-giban")?.value;
-    const safe_account_id = account_id ? account_id.trim() : "";
-
-    // --- Validation Checks ---
-    if (!referenceNo) { showError("reference-number", "Reference Number is required."); hasError = true;}
-    if (!taxablePerson) { showError("name-of-taxable-person", "Legal Name of Taxable Person is required."); hasError = true;}
-    if (!taxRegNo) { showError("tax-registration-number", "Tax Registration Number is required."); hasError = true;}
-    if (!taxPeriodVat) { showError("tax-period-vat", "Tax Period VAT is required."); hasError = true;}
-    if (!taxPeriodEnding) { showError("tax-period-ending", "Tax Period Ending is required."); hasError = true;}
-    if (!appDate) { showError("application-date", "Application Date is required."); hasError = true;}
-    if (!taxPaid) { showError("tax-paid", "Tax Paid is required."); hasError = true;}
-    if (!cachedFile || !cachedBase64) { showError("vat-tax-return", "Please upload the VAT Tax Return."); hasError = true;}
-    if (!safe_account_id) {
-    showError("submit_button_id", "Error: Associated Account ID is missing. Cannot proceed.");
-    hasError = true;
-    console.error("FATAL ERROR: Account ID is missing.");
-  }
-
-    // Conditional Validation
-    if (parseFloat(taxPaid) > 0) {
-        if (!paymentRef) 
-        { 
-            showError("payment-reference", "Payment Reference is required."); 
-            hasError = true;
-        }
-        if (!payGibanRef)
-        {
-            showError("pay-giban", "Pay (GIBAN) is required.");
-            hasError = true;
-        }
-        if (!cachedFilePayment || !cachedBase64Payment) 
-        { showError("payment-instruction", "Please upload the Payment Instruction."); 
-            hasError = true;
-        }
-    }
-
-    if (hasError) {
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Submit";
-        }
-        return;
-    }
-
-    let qtrDueDates = {};
-    let currentQuarterField = null;
-    let vatReturnDueDate = null;
-
-    try {
-        const normalized = taxPeriodVat.replace(/[–—−]/g, "-");
-        const parts = normalized.split(/\s*-\s*/);
-        if (parts.length >= 2) {
-            const startParsed = parseDayMonth(parts[0].trim());
-            const endParsed = parseDayMonth(parts[1].trim());
-            if (startParsed && endParsed) {
-                const startMonthNum = monthNameToNumber(startParsed.monthStr);
-                const endMonthNum = monthNameToNumber(endParsed.monthStr);
-                if (startMonthNum && endMonthNum) {
-                    
-                    // Use the fetched Financial Year Ending Date's year
-                    const referenceDate = financialYearEndingDate || new Date(); 
-                    const fy = referenceDate.getFullYear();
-
-                    let startYear, endYear;
-                    if (endMonthNum < startMonthNum) {
-                        // Period crosses year boundary (e.g., Nov - Jan)
-                        startYear = fy - 1;
-                        endYear = fy;
-                    } else {
-                        // Period is contained within the financial year
-                        startYear = fy;
-                        endYear = fy;
-                    }
-
-                    const endDay = Array.isArray(endParsed.day)
-                        ? (isLeapYear(endYear) ? endParsed.day[1] : endParsed.day[0])
-                        : endParsed.day;
-
-                    const endDate = new Date(endYear, endMonthNum - 1, endDay);
-
-                    const qtrDueDate = addOneYearAnd28Days(endDate);
-
-                    vatReturnDueDate = addMonths(qtrDueDate, 3);
-
-                    const quarterMap = {
-                        "1 Jan - 31 Mar": "st_Qtr_VAT_return_DD",
-                        "1 Apr - 30 Jun": "nd_Qtr_VAT_return_DD",
-                        "1 Jul - 30 Sep": "rd_Qtr_VAT_return_DD",
-                        "1 Oct - 31 Dec": "th_Qtr_VAT_return_DD",
-                        "1 Feb - 30 Apr": "st_Qtr_VAT_return_DD",
-                        "1 May - 31 Jul": "nd_Qtr_VAT_return_DD",
-                        "1 Aug - 31 Oct": "rd_Qtr_VAT_return_DD",
-                        "1 Nov - 31 Jan": "th_Qtr_VAT_return_DD",
-                        "1 Mar - 31 May": "st_Qtr_VAT_return_DD",
-                        "1 Jun - 31 Aug": "nd_Qtr_VAT_return_DD",
-                        "1 Sep - 30 Nov": "rd_Qtr_VAT_return_DD",
-                        "1 Dec - 28/29 Feb": "th_Qtr_VAT_return_DD"
-                    };
-
-                    currentQuarterField = quarterMap[taxPeriodVat] || null;
-                    if (currentQuarterField) {
-                        qtrDueDates[currentQuarterField] = qtrDueDate;
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Error computing quarter dates:", e);
-    }
-
-    try {
-        const apiData = {
-            id: app_id,
-            Reference_Number: referenceNo,
-            Legal_Name_of_Taxable_Person: taxablePerson,
-            Tax_Registration_Number_TRN: taxRegNo,
-            Tax_Period_VAT_QTR: taxPeriodVat,
-            Application_Date: appDate,
-            Tax_Period_Ending: taxPeriodEnding,
-            Application_Issuance_Date: appDate,
-            Tax_Paid: taxPaid
-        };
-        
-        // Only include payment fields if tax was paid
-        if (parseFloat(taxPaid) > 0) {
-            apiData.Payment_Reference = paymentRef;
-            apiData.Pay_GIBAN = payGibanRef;
-        }
-
-        await ZOHO.CRM.API.updateRecord({
-            Entity: "Applications1",
-            APIData: apiData,
-        });
-
-
-        // Pass ALL required data to the Deluge function via JSON string
-        const func_name = "ta_vatqr_submit_to_auth_update_account";
-        const req_data = {
-            "arguments": JSON.stringify({
-                "account_id": safe_account_id,
-                "legal_taxable_person": taxablePerson,
-                "trn_number": taxRegNo,
-                "tax_period_vat_qtr": taxPeriodVat,
-                "vat_pay_giban":payGibanRef
-            })
-        };
-
-        const accountResponse = await ZOHO.CRM.FUNCTIONS.execute(func_name, req_data);
-        console.log("Account Update Function Response:", accountResponse);
-
-        await uploadFileToCRM();
-        await ZOHO.CRM.BLUEPRINT.proceed();
-        await ZOHO.CRM.UI.Popup.closeReload();
-    } catch (error) {
-        console.error("Error on final submit:", error);
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Submit";
-        }
-    }
-}
-
-// -----------------------------
-// Event bindings (keep original IDs)
-// -----------------------------
-const vatInput = document.getElementById("vat-tax-return");
-if (vatInput) vatInput.addEventListener("change", cacheFileOnChange);
-
-const paymentInf = document.getElementById("payment-instruction");
-if(paymentInf) paymentInf.addEventListener("change", cacheFileOnChange)
-
-const recForm = document.getElementById("record-form");
-if (recForm) recForm.addEventListener("submit", update_record);
-
-// Close widget helper
-async function closeWidget() {
-    await ZOHO.CRM.UI.Popup.closeReload().then(console.log);
-}
-
+async function closeWidget() { await ZOHO.CRM.UI.Popup.closeReload(); }
 ZOHO.embeddedApp.init();

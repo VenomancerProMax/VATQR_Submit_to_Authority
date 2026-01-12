@@ -3,36 +3,50 @@
   margin: 0;
   padding: 0;
   font-family: 'Lato', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
   background-color: #f3f4f6;
+  width: 100vw;
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  position: relative;
+  align-items: flex-start;
+  overflow-y: auto;
 }
 
 .form-container {
-  background-color: #fff;
+  background-color: #ffffff;
   padding: 24px;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
-  max-width: 400px;
-  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 95%;
+  max-width: 450px;
   position: relative;
+  z-index: 10;
+  margin-top: 20px;
+  margin-bottom: 40px;
 }
 
 .form-container label {
-  margin-top: 16px;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #4b5563;
+  margin-bottom: 5px;
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  margin-top: 15px;
 }
 
 .form-container label:first-of-type {
-  margin-top: 0;
+  margin-top: 0 !important;
+}
+
+.req {
+  color: #ef4444;
+  font-size: 11px;
+  margin-left: 2px;
 }
 
 input[type="text"],
@@ -40,114 +54,144 @@ input[type="number"],
 input[type="date"],
 select {
   width: 100%;
-  padding: 10px;
-  margin-top: 8px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  font-size: 12px;
-  background-color: #fff;
-  appearance: none;
-}
-
-select:focus,
-input:focus {
-  outline: none;
-}
-
-input[type="file"] {
-  width: 100%;
-  padding: 8px 10px;
-  margin-top: 8px;
-  font-size: 12px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  background-color: #fff;
-}
-
-.error-message {
-  font-size: 12px;
-  color: #d93025;
-  margin-top: 4px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 11px !important;
+  background: #f9fafb;
   display: block;
+  color: #111827;
+}
+
+select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: #4A90E2;
+  background-color: #fff;
 }
 
 .input-group {
   display: flex;
-  margin-top: 8px;
+  height: 38px;
 }
 
 .input-group .currency {
-  background: #f0f0f0;
-  padding: 10px;
-  border: 1px solid #ccc;
+  background: #f3f4f6;
+  padding: 0 12px;
+  border: 1.5px solid #e5e7eb;
   border-right: none;
-  border-radius: 5px 0 0 5px;
-  font-size: 12px;
+  border-radius: 6px 0 0 6px;
+  font-size: 11px;
+  font-weight: bold;
   display: flex;
   align-items: center;
-  white-space: nowrap;
+  color: #6b7280;
 }
 
 .input-group input {
+  border-radius: 0 6px 6px 0;
   flex: 1;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 0 5px 5px 0;
+}
+
+.date-input-container {
+  position: relative;
+}
+
+.calendar-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
   font-size: 12px;
-  background-color: #fff;
-  margin: 0;
-  appearance: none;
+  opacity: 0.6;
 }
 
-/* Remove number input arrows/spinners */
-input[type=number] {
-  -moz-appearance: textfield;
+.file-upload-container {
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+  background-color: #f9fafb;
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-input[type=number]::-webkit-outer-spin-button,
-input[type=number]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+.file-upload-container.dragover {
+  border-color: #4A90E2;
+  background-color: #eff6ff;
+}
+
+.file-upload-label {
+  cursor: pointer;
+  width: 100%;
+}
+
+.upload-icon-small {
+  font-size: 18px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.file-upload-container p {
+  font-size: 10px;
+  color: #6b7280;
+}
+
+input[type="file"] {
+  display: none;
 }
 
 .submit-button {
-  margin-top: 20px;
+  margin-top: 24px;
   width: 100%;
-  padding: 12px;
+  height: 44px;
   background-color: #4A90E2;
   color: white;
   border: none;
-  border-radius: 5px;
-  font-size: 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.3s ease;
 }
 
-.submit-button:hover {
-  background-color: #357ABD;
+.error-message {
+  color: #ef4444;
+  font-size: 10px;
+  margin-top: 2px;
+  display: block;
+  min-height: 12px;
 }
 
 .close-button {
-  position: absolute;
+  position: fixed;
   top: 10px;
-  right: 10px;
-  background: transparent;
+  right: 15px;
+  background: #fff;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
-  font-size: 18px;
-  font-weight: bold;
   cursor: pointer;
-  color: #555;
+  font-size: 16px;
+  z-index: 100;
 }
 
-.close-button:hover {
-  color: #000;
-}
-
-/* UPLOAD BUFFER */
 .upload-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -156,49 +200,36 @@ input[type=number]::-webkit-inner-spin-button {
 
 .upload-box {
   background: #fff;
-  padding: 30px 40px;
+  padding: 20px;
   border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
   text-align: center;
-  width: 300px;
-}
-
-.upload-icon {
-  font-size: 40px;
-  margin-bottom: 15px;
-  color: #3498db;
-}
-
-.upload-title {
-  font-size: 18px;
-  font-weight: 500;
-  margin-bottom: 20px;
+  width: 220px;
 }
 
 .progress-bar-background {
   width: 100%;
-  height: 8px;
-  background: #eee;
-  border-radius: 5px;
+  height: 6px;
+  background: #f3f4f6;
+  border-radius: 10px;
+  margin-top: 12px;
   overflow: hidden;
 }
 
-.progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3498db, #2980b9);
-  width: 0%;
-  transition: width 0.3s ease-in-out;
-}
-
 .progress-bar-fill.animate {
-  animation: fillAnimation 2.5s ease-in-out forwards;
+  height: 100%;
+  background: #4A90E2;
+  animation: fillAnimation 2.5s infinite;
 }
 
 @keyframes fillAnimation {
-  from { width: 0%; }
-  to { width: 100%; }
+  0% { width: 0%; }
+  100% { width: 100%; }
 }
 
 .hidden {
   display: none;
+}
+
+#custom-modal.flex {
+  display: flex !important;
 }
