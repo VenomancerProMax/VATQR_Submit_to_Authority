@@ -26,24 +26,18 @@ function showModal(type, title, message) {
       modalBtn.textContent = "Finalizing...";
       
       try {
-        // 1. Trigger the Blueprint transition
         await ZOHO.CRM.BLUEPRINT.proceed();
         
-        // 2. Longer delay (1 second) to ensure the backend process is done
         setTimeout(() => {
-          // 3. Force the TOP window (the actual CRM) to reload its current URL
-          // This is the most "nuclear" reload option available in JS
           try {
             top.location.assign(top.location.href);
           } catch (e) {
-            // Fallback if assign is blocked
             top.location.href = top.location.href;
           }
         }, 1000);
 
       } catch (e) {
         console.error("Blueprint error", e);
-        // If it fails, still try to close the popup
         ZOHO.CRM.UI.Popup.closeReload().catch(() => {
            top.location.reload(true);
         });
@@ -163,22 +157,35 @@ function formatPrettyDate(d, m, y) {
 
 function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
 
+// Modified handleFile using readAsArrayBuffer for zero corruption
 async function handleFile(file, type) {
   clearErrors();
   if (!file) return;
-  if (file.size > 10 * 1024 * 1024) {
-    showModal("error", "File Too Large", "Max size is 10MB.");
+  if (file.size > 20 * 1024 * 1024) {
+    showModal("error", "File Too Large", "Max size is 20MB.");
     return;
   }
   document.getElementById(`file-name-${type}`).textContent = `File: ${file.name}`;
-  const base64 = await new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(',')[1]);
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
-  if (type === 'vat') { cachedFile = file; cachedBase64 = base64; }
-  else { cachedFilePayment = file; cachedBase64Payment = base64; }
+  
+  try {
+    const content = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsArrayBuffer(file);
+    });
+
+    if (type === 'vat') { 
+      cachedFile = file; 
+      cachedBase64 = content; 
+    } else { 
+      cachedFilePayment = file; 
+      cachedBase64Payment = content; 
+    }
+  } catch (err) {
+    console.error("File reading failed", err);
+    showModal("error", "Error", "Failed to read file.");
+  }
 }
 
 function setupDropZone(zoneId, inputId, type) {
@@ -211,13 +218,13 @@ async function update_record(event) {
   
   fields.forEach(f => { if (!document.getElementById(f).value.trim()) { showError(f, "Required"); hasError = true; } });
   
-  if (!cachedFile) { showError("vat-tax-return", "Upload required"); hasError = true; }
+  if (!cachedFile || !cachedBase64) { showError("vat-tax-return", "Upload required"); hasError = true; }
   
   const taxVal = parseFloat(document.getElementById("tax-paid").value) || 0;
   if (taxVal > 0) {
     if (!document.getElementById("payment-reference").value.trim()) { showError("payment-reference", "Required"); hasError = true; }
     if (!document.getElementById("pay-giban").value.trim()) { showError("pay-giban", "Required"); hasError = true; }
-    if (!cachedFilePayment) { showError("payment-instruction", "Upload required"); hasError = true; }
+    if (!cachedFilePayment || !cachedBase64Payment) { showError("payment-instruction", "Upload required"); hasError = true; }
   }
   
   if (hasError) return;
@@ -256,10 +263,20 @@ async function update_record(event) {
       })
     });
     
-    await ZOHO.CRM.API.attachFile({ Entity: "Applications1", RecordID: app_id, File: { Name: cachedFile.name, Content: cachedBase64 } });
+    // Attach main VAT Return
+    await ZOHO.CRM.API.attachFile({ 
+      Entity: "Applications1", 
+      RecordID: app_id, 
+      File: { Name: cachedFile.name, Content: cachedBase64 } 
+    });
     
-    if (cachedFilePayment) {
-      await ZOHO.CRM.API.attachFile({ Entity: "Applications1", RecordID: app_id, File: { Name: cachedFilePayment.name, Content: cachedBase64Payment } });
+    // Attach Payment Instruction if applicable
+    if (cachedFilePayment && cachedBase64Payment) {
+      await ZOHO.CRM.API.attachFile({ 
+        Entity: "Applications1", 
+        RecordID: app_id, 
+        File: { Name: cachedFilePayment.name, Content: cachedBase64Payment } 
+      });
     }
     
     hideUploadBuffer();
