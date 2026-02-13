@@ -210,6 +210,18 @@ function checkTaxAndToggleVisibility() {
   document.getElementById("payment-section").style.display = isPaid ? "block" : "none";
 }
 
+const taxInput = document.getElementById("tax-paid");
+taxInput.addEventListener("blur", function(e) {
+    let rawValue = e.target.value.replace(/,/g, "");
+    
+    if (rawValue !== "" && !isNaN(rawValue)) {
+        e.target.value = new Intl.NumberFormat("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(parseFloat(rawValue));
+    }
+});
+
 async function update_record(event) {
   event.preventDefault();
   clearErrors();
@@ -228,6 +240,8 @@ async function update_record(event) {
   }
   
   if (hasError) return;
+
+  const taxInputStr = document.getElementById("tax-paid").value.replace(/,/g, "");
   
   const btn = document.getElementById("submit_button_id");
   btn.disabled = true;
@@ -243,7 +257,7 @@ async function update_record(event) {
       Tax_Period_VAT_QTR: document.getElementById("tax-period-vat").value,
       Application_Date: document.getElementById("application-date").value,
       Tax_Period_Ending: document.getElementById("tax-period-ending").value,
-      Tax_Paid: taxVal
+      Tax_Paid: taxInputStr
     };
     
     if (taxVal > 0) {
