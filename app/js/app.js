@@ -11,43 +11,29 @@ function showModal(type, title, message) {
   const iconSuccess = document.getElementById("modal-icon-success");
   const iconError = document.getElementById("modal-icon-error");
   const modalBtn = document.getElementById("modal-close");
-  
   document.getElementById("modal-title").textContent = title;
   document.getElementById("modal-message").textContent = message;
-  
   modalBtn.onclick = closeModal;
-
   if (type === "success") { 
     iconSuccess.classList.remove("hidden"); 
     iconError.classList.add("hidden");
-    
     modalBtn.onclick = async () => {
       modalBtn.disabled = true;
       modalBtn.textContent = "Finalizing...";
-      
       try {
         await ZOHO.CRM.BLUEPRINT.proceed();
-        
         setTimeout(() => {
-          try {
-            top.location.assign(top.location.href);
-          } catch (e) {
-            top.location.href = top.location.href;
-          }
+          try { top.location.assign(top.location.href); } 
+          catch (e) { top.location.href = top.location.href; }
         }, 1000);
-
       } catch (e) {
-        console.error("Blueprint error", e);
-        ZOHO.CRM.UI.Popup.closeReload().catch(() => {
-           top.location.reload(true);
-        });
+        ZOHO.CRM.UI.Popup.closeReload().catch(() => { top.location.reload(true); });
       }
     };
   } else { 
     iconSuccess.classList.add("hidden"); 
     iconError.classList.remove("hidden"); 
   }
-  
   modal.classList.remove("hidden");
   modal.classList.add("flex");
 }
@@ -58,9 +44,7 @@ function closeModal() {
   modal.classList.remove("flex");
 }
 
-function clearErrors() {
-  document.querySelectorAll(".error-message").forEach(span => span.textContent = "");
-}
+function clearErrors() { document.querySelectorAll(".error-message").forEach(span => span.textContent = ""); }
 
 function showError(fieldId, message) {
   const errorSpan = document.getElementById(`error-${fieldId}`);
@@ -73,9 +57,7 @@ function showUploadBuffer(msg = "Processing...") {
   buffer.classList.remove("hidden");
 }
 
-function hideUploadBuffer() {
-  document.getElementById("upload-buffer").classList.add("hidden");
-}
+function hideUploadBuffer() { document.getElementById("upload-buffer").classList.add("hidden"); }
 
 ZOHO.embeddedApp.on("PageLoad", async (entity) => {
   try {
@@ -83,24 +65,19 @@ ZOHO.embeddedApp.on("PageLoad", async (entity) => {
     const appData = appResp.data[0];
     app_id = appData.id;
     account_id = appData.Account_Name?.id || "";
-    
     const fyEnding = appData.Financial_Year_Ending;
     let year = parseInt(fyEnding, 10);
     financialYearEndingDate = (!isNaN(year) && year > 1900) ? new Date(year, 0, 1) : new Date();
-    
     const accResp = await ZOHO.CRM.API.getRecord({ Entity: "Accounts", RecordID: account_id });
     const accData = accResp.data[0];
-    
     legalNameTaxablePerson = accData.Legal_Name_of_Taxable_Person;
     vat_pay_giban_account = accData.VAT_Pay_GIBAN;
     ctTrn = accData.TRN_Number;
     taxPeriodVat = accData.Tax_Period_VAT_QTR;
-    
     document.getElementById("name-of-taxable-person").value = legalNameTaxablePerson || "";
     document.getElementById("tax-registration-number").value = ctTrn || "";
     document.getElementById("tax-period-vat").value = taxPeriodVat || "";
     document.getElementById("pay-giban").value = vat_pay_giban_account || "";
-    
     updateTaxPeriodEnding();
     checkTaxAndToggleVisibility();
   } catch (err) { console.error(err); }
@@ -110,26 +87,20 @@ function updateTaxPeriodEnding() {
   const val = document.getElementById("tax-period-vat")?.value;
   const target = document.getElementById("tax-period-ending");
   if (!val || !target) return;
-  
   const refDate = financialYearEndingDate || new Date();
   let fy = refDate.getFullYear();
   const normalized = val.replace(/[–—−]/g, "-");
   const parts = normalized.split(/\s*-\s*/);
   if (parts.length < 2) return;
-  
   const startP = parseDayMonth(parts[0]);
   const endP = parseDayMonth(parts[1]);
   if (!startP || !endP) return;
-  
   const sM = monthNameToNumber(startP.monthStr);
   const eM = monthNameToNumber(endP.monthStr);
-  
   let sY = (eM < sM) ? fy - 1 : fy;
   let eY = fy;
-  
   const sD = Array.isArray(startP.day) ? (isLeapYear(sY) ? startP.day[1] : startP.day[0]) : startP.day;
   const eD = Array.isArray(endP.day) ? (isLeapYear(eY) ? endP.day[1] : endP.day[0]) : endP.day;
-  
   target.value = `${formatPrettyDate(sD, sM, sY)} - ${formatPrettyDate(eD, eM, eY)}`;
 }
 
@@ -157,7 +128,6 @@ function formatPrettyDate(d, m, y) {
 
 function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
 
-// Modified handleFile using readAsArrayBuffer for zero corruption
 async function handleFile(file, type) {
   clearErrors();
   if (!file) return;
@@ -166,7 +136,6 @@ async function handleFile(file, type) {
     return;
   }
   document.getElementById(`file-name-${type}`).textContent = `File: ${file.name}`;
-  
   try {
     const content = await new Promise((res, rej) => {
       const r = new FileReader();
@@ -174,18 +143,9 @@ async function handleFile(file, type) {
       r.onerror = rej;
       r.readAsArrayBuffer(file);
     });
-
-    if (type === 'vat') { 
-      cachedFile = file; 
-      cachedBase64 = content; 
-    } else { 
-      cachedFilePayment = file; 
-      cachedBase64Payment = content; 
-    }
-  } catch (err) {
-    console.error("File reading failed", err);
-    showModal("error", "Error", "Failed to read file.");
-  }
+    if (type === 'vat') { cachedFile = file; cachedBase64 = content; } 
+    else { cachedFilePayment = file; cachedBase64Payment = content; }
+  } catch (err) { showModal("error", "Error", "Failed to read file."); }
 }
 
 function setupDropZone(zoneId, inputId, type) {
@@ -205,49 +165,36 @@ function setupDropZone(zoneId, inputId, type) {
 }
 
 function checkTaxAndToggleVisibility() {
-  const val = parseFloat(document.getElementById("tax-paid").value) || 0;
+  const rawInput = document.getElementById("tax-paid").value || "";
+  const val = parseFloat(rawInput.replace(/,/g, "")) || 0;
   const isPaid = val > 0;
   document.getElementById("payment-section").style.display = isPaid ? "block" : "none";
 }
 
-const taxInput = document.getElementById("tax-paid");
-taxInput.addEventListener("blur", function(e) {
-    let rawValue = e.target.value.replace(/,/g, "");
-    
-    if (rawValue !== "" && !isNaN(rawValue)) {
-        e.target.value = new Intl.NumberFormat("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(parseFloat(rawValue));
-    }
-});
+function formatAED(value) {
+  let num = parseFloat(value.replace(/,/g, ""));
+  if (isNaN(num)) return "";
+  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 async function update_record(event) {
   event.preventDefault();
   clearErrors();
   let hasError = false;
   const fields = ["reference-number", "name-of-taxable-person", "tax-registration-number", "tax-period-vat", "tax-period-ending", "application-date", "tax-paid"];
-  
   fields.forEach(f => { if (!document.getElementById(f).value.trim()) { showError(f, "Required"); hasError = true; } });
-  
   if (!cachedFile || !cachedBase64) { showError("vat-tax-return", "Upload required"); hasError = true; }
-  
-  const taxVal = parseFloat(document.getElementById("tax-paid").value) || 0;
+  const taxVal = parseFloat(document.getElementById("tax-paid").value.replace(/,/g, "")) || 0;
   if (taxVal > 0) {
     if (!document.getElementById("payment-reference").value.trim()) { showError("payment-reference", "Required"); hasError = true; }
     if (!document.getElementById("pay-giban").value.trim()) { showError("pay-giban", "Required"); hasError = true; }
     if (!cachedFilePayment || !cachedBase64Payment) { showError("payment-instruction", "Upload required"); hasError = true; }
   }
-  
   if (hasError) return;
-
-  const taxInputStr = document.getElementById("tax-paid").value.replace(/,/g, "");
-  
   const btn = document.getElementById("submit_button_id");
   btn.disabled = true;
   btn.textContent = "Updating...";
   showUploadBuffer("Submitting...");
-  
   try {
     const apiData = {
       id: app_id,
@@ -257,16 +204,13 @@ async function update_record(event) {
       Tax_Period_VAT_QTR: document.getElementById("tax-period-vat").value,
       Application_Date: document.getElementById("application-date").value,
       Tax_Period_Ending: document.getElementById("tax-period-ending").value,
-      Tax_Paid: taxInputStr
+      Tax_Paid: taxVal
     };
-    
     if (taxVal > 0) {
       apiData.Payment_Reference = document.getElementById("payment-reference").value;
       apiData.Pay_GIBAN = document.getElementById("pay-giban").value;
     }
-    
     await ZOHO.CRM.API.updateRecord({ Entity: "Applications1", APIData: apiData });
-    
     await ZOHO.CRM.FUNCTIONS.execute("ta_vatqr_submit_to_auth_update_account", {
       arguments: JSON.stringify({
         account_id,
@@ -276,38 +220,41 @@ async function update_record(event) {
         vat_pay_giban: apiData.Pay_GIBAN || ""
       })
     });
-    
-    // Attach main VAT Return
-    await ZOHO.CRM.API.attachFile({ 
-      Entity: "Applications1", 
-      RecordID: app_id, 
-      File: { Name: cachedFile.name, Content: cachedBase64 } 
-    });
-    
-    // Attach Payment Instruction if applicable
+    await ZOHO.CRM.API.attachFile({ Entity: "Applications1", RecordID: app_id, File: { Name: cachedFile.name, Content: cachedBase64 } });
     if (cachedFilePayment && cachedBase64Payment) {
-      await ZOHO.CRM.API.attachFile({ 
-        Entity: "Applications1", 
-        RecordID: app_id, 
-        File: { Name: cachedFilePayment.name, Content: cachedBase64Payment } 
-      });
+      await ZOHO.CRM.API.attachFile({ Entity: "Applications1", RecordID: app_id, File: { Name: cachedFilePayment.name, Content: cachedBase64Payment } });
     }
-    
     hideUploadBuffer();
     showModal("success", "Success!", "Application processed. Click Ok to reload.");
   } catch (err) {
-    btn.disabled = false;
-    btn.textContent = "Submit";
+    btn.disabled = false; btn.textContent = "Submit";
     hideUploadBuffer();
-    showModal("error", "Failed", "Submission failed. Please try again.");
+    showModal("error", "Failed", "Submission failed.");
   }
 }
 
-document.getElementById("tax-paid").addEventListener("input", checkTaxAndToggleVisibility);
+// LIVE FORMATTING HANDLER
+document.getElementById("tax-paid").addEventListener("input", function(e) {
+  let cursor = e.target.selectionStart;
+  let oldLen = e.target.value.length;
+  let value = e.target.value.replace(/[^\d.]/g, '');
+  let parts = value.split('.');
+  if (parts.length > 2) value = parts[0] + '.' + parts.slice(1).join('');
+  if (parts[0]) parts[0] = parseInt(parts[0], 10).toLocaleString('en-US');
+  e.target.value = parts.join('.');
+  let newLen = e.target.value.length;
+  cursor = cursor + (newLen - oldLen);
+  e.target.setSelectionRange(cursor, cursor);
+  checkTaxAndToggleVisibility();
+});
+
+document.getElementById("tax-paid").addEventListener("blur", function(e) {
+  if (e.target.value) e.target.value = formatAED(e.target.value);
+});
+
 document.getElementById("tax-period-vat").addEventListener("change", updateTaxPeriodEnding);
 document.getElementById("record-form").addEventListener("submit", update_record);
 setupDropZone("drop-zone-vat", "vat-tax-return", "vat");
 setupDropZone("drop-zone-pay", "payment-instruction", "pay");
-
 async function closeWidget() { await ZOHO.CRM.UI.Popup.closeReload(); }
 ZOHO.embeddedApp.init();

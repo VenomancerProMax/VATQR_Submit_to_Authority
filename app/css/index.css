@@ -5,7 +5,6 @@
   font-family: 'Lato', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-
 body {
   background-color: #f3f4f6;
   width: 100vw;
@@ -14,7 +13,6 @@ body {
   align-items: flex-start;
   overflow-y: auto;
 }
-
 .form-container {
   background-color: #ffffff;
   padding: 24px;
@@ -27,7 +25,6 @@ body {
   margin-top: 20px;
   margin-bottom: 40px;
 }
-
 .form-container label {
   font-weight: 700 !important;
   font-size: 10px !important;
@@ -38,17 +35,14 @@ body {
   display: block;
   margin-top: 15px;
 }
-
 .form-container label:first-of-type {
   margin-top: 0 !important;
 }
-
 .req {
   color: #ef4444;
   font-size: 11px;
   margin-left: 2px;
 }
-
 input[type="text"],
 input[type="number"],
 input[type="date"],
@@ -63,23 +57,19 @@ select {
   display: block;
   color: #111827;
 }
-
 select {
   appearance: auto;
   cursor: pointer;
 }
-
 input:focus, select:focus {
   outline: none;
   border-color: #4A90E2;
   background-color: #fff;
 }
-
 .input-group {
   display: flex;
   height: 38px;
 }
-
 .input-group .currency {
   background: #f3f4f6;
   padding: 0 12px;
@@ -92,16 +82,13 @@ input:focus, select:focus {
   align-items: center;
   color: #6b7280;
 }
-
 .input-group input {
   border-radius: 0 6px 6px 0;
   flex: 1;
 }
-
 .date-input-container {
   position: relative;
 }
-
 .calendar-icon {
   position: absolute;
   right: 12px;
@@ -111,7 +98,6 @@ input:focus, select:focus {
   font-size: 12px;
   opacity: 0.6;
 }
-
 .file-upload-container {
   border: 2px dashed #d1d5db;
   border-radius: 8px;
@@ -123,32 +109,26 @@ input:focus, select:focus {
   align-items: center;
   justify-content: center;
 }
-
 .file-upload-container.dragover {
   border-color: #4A90E2;
   background-color: #eff6ff;
 }
-
 .file-upload-label {
   cursor: pointer;
   width: 100%;
 }
-
 .upload-icon-small {
   font-size: 18px;
   display: block;
   margin-bottom: 2px;
 }
-
 .file-upload-container p {
   font-size: 10px;
   color: #6b7280;
 }
-
 input[type="file"] {
   display: none;
 }
-
 .submit-button {
   margin-top: 24px;
   width: 100%;
@@ -161,7 +141,6 @@ input[type="file"] {
   font-weight: 700;
   cursor: pointer;
 }
-
 .error-message {
   color: #ef4444;
   font-size: 10px;
@@ -169,7 +148,6 @@ input[type="file"] {
   display: block;
   min-height: 12px;
 }
-
 .close-button {
   position: fixed;
   top: 10px;
@@ -187,7 +165,6 @@ input[type="file"] {
   font-size: 16px;
   z-index: 100;
 }
-
 .upload-overlay {
   position: fixed;
   inset: 0;
@@ -197,7 +174,6 @@ input[type="file"] {
   align-items: center;
   justify-content: center;
 }
-
 .upload-box {
   background: #fff;
   padding: 20px;
@@ -205,7 +181,6 @@ input[type="file"] {
   text-align: center;
   width: 220px;
 }
-
 .progress-bar-background {
   width: 100%;
   height: 6px;
@@ -214,22 +189,18 @@ input[type="file"] {
   margin-top: 12px;
   overflow: hidden;
 }
-
 .progress-bar-fill.animate {
   height: 100%;
   background: #4A90E2;
   animation: fillAnimation 2.5s infinite;
 }
-
 @keyframes fillAnimation {
   0% { width: 0%; }
   100% { width: 100%; }
 }
-
 .hidden {
   display: none;
 }
-
 #custom-modal.flex {
   display: flex !important;
 }
